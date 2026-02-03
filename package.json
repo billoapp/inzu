@@ -1,0 +1,24 @@
+{
+  "name": "inzu-rental-manager",
+  "version": "1.0.0",
+  "description": "Rental Property Management PWA",
+  "main": "index.html",
+  "scripts": {
+    "deploy": "node deploy.js",
+    "deploy:patch": "node deploy.js patch",
+    "deploy:minor": "node deploy.js minor", 
+    "deploy:major": "node deploy.js major",
+    "deploy:none": "node deploy.js none",
+    "version:patch": "node version-manager.js patch",
+    "version:minor": "node version-manager.js minor",
+    "version:major": "node version-manager.js major",
+    "serve": "firebase serve --only hosting",
+    "deploy:firebase": "firebase deploy --only hosting"
+  },
+  "keywords": ["pwa", "rental", "property", "management", "firebase"],
+  "author": "Inzu Team",
+  "license": "MIT",
+  "devDependencies": {
+    "firebase-tools": "^12.0.0"
+  }
+}

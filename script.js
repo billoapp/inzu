@@ -1,0 +1,4764 @@
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+import { getDatabase, ref, set, get, onValue } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
+import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+import { firebaseConfig } from './firebase-config.js';
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const database = getDatabase(app);
+const db = getFirestore(app); // Firestore as backup
+const auth = getAuth(app);
+const googleProvider = new GoogleAuthProvider();
+
+// Visual Sync Status Bar
+function updateSyncStatus(status) {
+    const syncStatus = document.getElementById('syncStatus');
+    if (!syncStatus) return;
+    
+    // Remove all status classes
+    syncStatus.classList.remove('syncing', 'synced', 'error');
+    
+    // Update status
+    syncStatus.classList.add(status);
+    
+    // Update visual indicator
+    const progress = syncStatus.querySelector('.sync-progress');
+    if (progress) {
+        switch (status) {
+            case 'syncing':
+                progress.style.width = '50%';
+                progress.style.background = '#f59e0b';
+                break;
+            case 'synced':
+                progress.style.width = '100%';
+                progress.style.background = '#10b981';
+                break;
+            case 'error':
+                progress.style.width = '100%';
+                progress.style.background = '#ef4444';
+                break;
+        }
+    }
+    
+    // Auto-hide synced status after 2 seconds
+    if (status === 'synced') {
+        setTimeout(() => {
+            syncStatus.classList.remove('synced');
+        }, 2000);
+    }
+    
+    // Auto-hide error status after 3 seconds
+    if (status === 'error') {
+        setTimeout(() => {
+            syncStatus.classList.remove('error');
+        }, 3000);
+    }
+}
+
+// Toast Notification System (for important actions only)
+function showToast(message, type = 'info', duration = 3000) {
+    // Create toast container if it doesn't exist
+    let container = document.querySelector('.toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'toast-container';
+        document.body.appendChild(container);
+    }
+
+    // Create toast element
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `
+        <span>${message}</span>
+        <span class="toast-close" onclick="this.parentElement.remove()">×</span>
+    `;
+
+    // Add to container
+    container.appendChild(toast);
+
+    // Show toast
+    setTimeout(() => toast.classList.add('show'), 10);
+
+    // Auto remove
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 200);
+    }, duration);
+}
+
+// Replace showNotification with modern toast
+function showNotification(message, type = 'info') {
+    showToast(message, type);
+}
+
+// Modern confirm dialog
+function showConfirm(message, onConfirm, onCancel) {
+    const confirmed = confirm(message);
+    if (confirmed && onConfirm) onConfirm();
+    if (!confirmed && onCancel) onCancel();
+    return confirmed;
+}
+
+// Data storage
+let data = {
+    properties: [],
+    selectedPropertyId: null
+};
+
+let isOnline = navigator.onLine;
+let hasSyncedOnce = false;
+let currentUser = null;
+
+// Edit state variables
+let editingPropertyId = null;
+window.editingTenantId = null;
+window.editingMonthlyId = null;
+window.editingExpenseId = null;
+window.editingMoveOutId = null;
+window.editingQueryId = null;
+
+// File storage
+window.existingLeaseFiles = [];
+window.existingIdFiles = [];
+window.idDocumentMode = 'new';
+
+// Form state variables
+let tenantFormInitialState = '';
+let hasTenantFormChanged = false;
+let monthlyFormInitialState = '';
+let hasMonthlyFormChanged = false;
+let expenseFormInitialState = '';
+let hasExpenseFormChanged = false;
+let moveOutFormInitialState = '';
+let hasMoveOutFormChanged = false;
+
+// Original data for comparison
+window.originalTenantData = null;
+window.originalMonthlyData = null;
+window.originalExpenseData = null;
+window.originalMoveOutData = null;
+
+// Initialize app
+document.addEventListener('DOMContentLoaded', function() {
+    checkAuthStatus();
+});
+
+// Check authentication status
+function checkAuthStatus() {
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            currentUser = user;
+            // For returning users, hide splash and show app
+            hideSplash();
+            document.getElementById('authContainer').style.display = 'none';
+            document.getElementById('appContent').style.display = 'block';
+            
+            // Update user info in slideout
+            updateSlideoutUserInfo();
+            
+            // Load data using best practices
+            loadData().then(() => {
+                // After data is loaded, update UI
+                renderAllEntries();
+                updateTenantSelects();
+                updateSummary();
+                updateSyncStatus('synced');
+            }).catch((error) => {
+                console.error('❌ Error loading data:', error);
+                updateSyncStatus('error');
+            });
+            
+            cleanupInvalidTenants();
+            initializeForms();
+            initializeNavigation();
+            setDefaultDates();
+            initializePWA();
+            setupRealtimeSync();
+        } else {
+            currentUser = null;
+            // For new users, hide both auth and app initially
+            // Let user click "Get Started" first to show auth
+            document.getElementById('authContainer').style.display = 'none';
+            document.getElementById('appContent').style.display = 'none';
+        }
+    });
+}
+
+// Google Sign In
+async function loginWithGoogle() {
+    try {
+        showNotification('Opening Google Sign-In...');
+        // Ensure auth persistence is set to local so user remains signed in after refresh
+        await setPersistence(auth, browserLocalPersistence);
+        const result = await signInWithPopup(auth, googleProvider);
+        showNotification(`Welcome, ${result.user.displayName || result.user.email}!`);
+    } catch (error) {
+        console.error('Login error details:', error && error.code, error && error.message);
+
+        // Provide helpful error messages
+        let errorMsg = 'Login failed';
+        if (error && error.code === 'auth/operation-not-allowed') {
+            errorMsg = 'Google Sign-In is not enabled. Please check Firebase console.';
+        } else if (error && error.code === 'auth/popup-blocked') {
+            errorMsg = 'Pop-up was blocked. Please allow pop-ups and try again.';
+        } else if (error && error.code === 'auth/popup-closed-by-user') {
+            errorMsg = 'Sign-in was cancelled.';
+        } else if (error && error.message) {
+            errorMsg = error.message;
+        }
+
+        showNotification(errorMsg);
+    }
+}
+
+// Logout
+async function logoutUser() {
+    if (confirm('Are you sure you want to logout? Your data is saved to your Google account.')) {
+        try {
+            await signOut(auth);
+            showToast('Logged out successfully', 'success');
+        } catch (error) {
+            console.error('Logout error:', error);
+            showNotification('Logout failed');
+        }
+    }
+}
+
+// Setup real-time sync with Firebase
+async function setupRealtimeSync() {
+    if (!currentUser) return;
+    const dataRef = ref(database, `users/${currentUser.uid}/rentalData`);
+
+    // Only setup realtime sync if we already have data
+    if (data && data.properties && data.properties.length > 0) {
+        console.log('🔄 Setting up realtime sync for existing data...');
+        
+        // Listen for real-time changes
+        onValue(dataRef, (snapshot) => {
+            const firebaseData = snapshot.val();
+            if (firebaseData && JSON.stringify(firebaseData) !== JSON.stringify(data)) {
+                console.log('📥 Data changed in Firebase, updating local...');
+                data = firebaseData;
+                renderAllEntries();
+                updateTenantSelects();
+                updateSummary();
+                showNotification('Data synced from cloud', 'info');
+            }
+        });
+    } else {
+        console.log('📭 No local data to sync, Firebase sync will be handled by loadData()');
+    }
+}
+
+// Load data with proper priority: Firebase → localStorage → empty
+async function loadData() {
+    console.log('🔄 Loading data with best practices...');
+    
+    // 1. Try Firebase first (most reliable)
+    if (currentUser) {
+        try {
+            const dataRef = ref(database, `users/${currentUser.uid}/rentalData`);
+            const snapshot = await get(dataRef);
+            
+            if (snapshot.exists()) {
+                console.log('✅ Loaded data from Firebase');
+                data = snapshot.val();
+                
+                // Backup to localStorage for offline access
+                localStorage.setItem('inzuData', JSON.stringify(data));
+                localStorage.setItem('lastSaved', new Date().toLocaleString());
+                
+                migrateToHierarchicalStructure();
+                return data;
+            }
+        } catch (error) {
+            console.warn('⚠️ Firebase unavailable, trying localStorage:', error);
+        }
+    }
+    
+    // 2. Fallback to localStorage
+    try {
+        const localData = localStorage.getItem('inzuData');
+        if (localData) {
+            console.log('✅ Loaded data from localStorage');
+            data = JSON.parse(localData);
+            
+            // Try to sync to Firebase if available
+            if (currentUser && data.properties && data.properties.length > 0) {
+                console.log('📤 Backing up local data to Firebase...');
+                saveToFirebaseOnly(data);
+            }
+            
+            migrateToHierarchicalStructure();
+            return data;
+        }
+    } catch (error) {
+        console.warn('⚠️ localStorage corrupted, starting fresh:', error);
+    }
+    
+    // 3. Start with empty data
+    console.log('🆕 Starting with empty data');
+    data = { properties: [], selectedPropertyId: null };
+    return data;
+}
+
+// ===== SAFE TENANT HELPERS =====
+function getPropertyOrFail(propertyId) {
+    const property = data.properties.find(p => p.id === propertyId);
+    if (!property) {
+        console.error('❌ Property not found:', propertyId);
+        return null;
+    }
+    
+    // Ensure tenants array exists
+    if (!Array.isArray(property.tenants)) {
+        property.tenants = [];
+    }
+    
+    return property;
+}
+
+function findTenantInAllProperties(tenantId) {
+    for (const property of data.properties) {
+        if (property.tenants) {
+            const tenant = property.tenants.find(t => t.id === tenantId);
+            if (tenant) {
+                return { tenant, property };
+            }
+        }
+    }
+    return null;
+}
+
+function findTenantInProperty(propertyId, tenantId) {
+    const property = getPropertyOrFail(propertyId);
+    if (!property) return null;
+    
+    const tenant = property.tenants.find(t => t.id === tenantId);
+    return tenant ? { tenant, property } : null;
+}
+
+// ===== CLEAN UP INVALID TENANTS =====
+function cleanupInvalidTenants() {
+    // Clean up invalid tenants in all properties
+    data.properties.forEach(property => {
+        if (property.tenants) {
+            const originalCount = property.tenants.length;
+            property.tenants = property.tenants.filter(tenant => {
+                const name = tenant.name && tenant.name.trim() !== '';
+                const unit = tenant.unit && tenant.unit.trim() !== '';
+                return name && unit;
+            });
+            
+            const removedCount = originalCount - property.tenants.length;
+            if (removedCount > 0) {
+                console.log(`Removed ${removedCount} invalid tenant(s) missing name or unit from property: ${property.name}`);
+                saveData();
+            }
+        }
+    });
+}
+
+// Migrate from flat structure to hierarchical structure
+function migrateToHierarchicalStructure() {
+    // Always use the global data object
+    const needsMigration = data;
+    const hasOldData = (needsMigration.tenants && needsMigration.tenants.length > 0) ||
+                      (needsMigration.monthly && needsMigration.monthly.length > 0) ||
+                      (needsMigration.expenses && needsMigration.expenses.length > 0) ||
+                      (needsMigration.moveOuts && needsMigration.moveOuts.length > 0) ||
+                      (needsMigration.queries && needsMigration.queries.length > 0);
+    
+    console.log('Checking migration needs...', {
+        hasOldData,
+        tenants: needsMigration.tenants?.length || 0,
+        monthly: needsMigration.monthly?.length || 0,
+        expenses: needsMigration.expenses?.length || 0,
+        moveOuts: needsMigration.moveOuts?.length || 0,
+        queries: needsMigration.queries?.length || 0
+    });
+    
+    if (!hasOldData) {
+        console.log('No migration needed - already hierarchical or empty');
+        return;
+    }
+    
+    console.log('MIGRATING from flat to hierarchical structure...');
+    
+    // Ensure properties array exists
+    if (!needsMigration.properties) needsMigration.properties = [];
+    
+    // Create a default property if none exists
+    if (needsMigration.properties.length === 0) {
+        const defaultProperty = {
+            id: Date.now(),
+            name: 'Default Property',
+            address: 'Default Address',
+            type: 'apartment',
+            units: 50,
+            description: 'Default property for migrated data',
+            tenants: [],
+            monthly: [],
+            expenses: [],
+            moveOuts: [],
+            queries: [],
+            createdAt: new Date().toISOString()
+        };
+        needsMigration.properties.push(defaultProperty);
+        needsMigration.selectedPropertyId = defaultProperty.id;
+        console.log('Created default property:', defaultProperty.id);
+    }
+    
+    const defaultPropertyId = needsMigration.properties[0].id;
+    console.log('Using property ID for migration:', defaultPropertyId);
+    
+    // Migrate tenants
+    if (needsMigration.tenants && needsMigration.tenants.length > 0) {
+        console.log('Migrating', needsMigration.tenants.length, 'tenants');
+        needsMigration.properties.forEach(property => {
+            property.tenants = property.tenants || [];
+        });
+        
+        needsMigration.tenants.forEach(tenant => {
+            const targetPropertyId = tenant.propertyId || defaultPropertyId;
+            const property = needsMigration.properties.find(p => p.id === targetPropertyId);
+            if (property) {
+                property.tenants = property.tenants || [];
+                property.tenants.push(tenant);
+                console.log('Migrated tenant:', tenant.name, 'to property:', property.name);
+            } else {
+                console.warn('Property not found for tenant:', targetPropertyId);
+            }
+        });
+        delete needsMigration.tenants;
+        console.log('Deleted old tenants array');
+    }
+    
+    // Migrate monthly payments
+    if (needsMigration.monthly && needsMigration.monthly.length > 0) {
+        console.log('Migrating', needsMigration.monthly.length, 'monthly payments');
+        needsMigration.properties.forEach(property => {
+            property.monthly = property.monthly || [];
+        });
+        
+        needsMigration.monthly.forEach(payment => {
+            const targetPropertyId = payment.propertyId || defaultPropertyId;
+            const property = needsMigration.properties.find(p => p.id === targetPropertyId);
+            if (property) {
+                property.monthly = property.monthly || [];
+                property.monthly.push(payment);
+            }
+        });
+        delete needsMigration.monthly;
+        console.log('Deleted old monthly array');
+    }
+    
+    // Migrate expenses
+    if (needsMigration.expenses && needsMigration.expenses.length > 0) {
+        console.log('Migrating', needsMigration.expenses.length, 'expenses');
+        needsMigration.properties.forEach(property => {
+            property.expenses = property.expenses || [];
+        });
+        
+        needsMigration.expenses.forEach(expense => {
+            const targetPropertyId = expense.propertyId || defaultPropertyId;
+            const property = needsMigration.properties.find(p => p.id === targetPropertyId);
+            if (property) {
+                property.expenses = property.expenses || [];
+                property.expenses.push(expense);
+            }
+        });
+        delete needsMigration.expenses;
+        console.log('Deleted old expenses array');
+    }
+    
+    // Migrate move outs
+    if (needsMigration.moveOuts && needsMigration.moveOuts.length > 0) {
+        console.log('Migrating', needsMigration.moveOuts.length, 'move outs');
+        needsMigration.properties.forEach(property => {
+            property.moveOuts = property.moveOuts || [];
+        });
+        
+        needsMigration.moveOuts.forEach(moveOut => {
+            const targetPropertyId = moveOut.propertyId || defaultPropertyId;
+            const property = needsMigration.properties.find(p => p.id === targetPropertyId);
+            if (property) {
+                property.moveOuts = property.moveOuts || [];
+                property.moveOuts.push(moveOut);
+            }
+        });
+        delete needsMigration.moveOuts;
+        console.log('Deleted old moveOuts array');
+    }
+    
+    // Migrate queries
+    if (needsMigration.queries && needsMigration.queries.length > 0) {
+        console.log('Migrating', needsMigration.queries.length, 'queries');
+        needsMigration.properties.forEach(property => {
+            property.queries = property.queries || [];
+        });
+        
+        needsMigration.queries.forEach(query => {
+            const targetPropertyId = query.propertyId || defaultPropertyId;
+            const property = needsMigration.properties.find(p => p.id === targetPropertyId);
+            if (property) {
+                property.queries = property.queries || [];
+                property.queries.push(query);
+            }
+        });
+        delete needsMigration.queries;
+        console.log('Deleted old queries array');
+    }
+    
+    console.log('Migration to hierarchical structure completed');
+    console.log('Final structure:', JSON.stringify(needsMigration, null, 2));
+    
+    // Show notification to user
+    if (typeof showNotification !== 'undefined') {
+        showNotification('🏠 Database structure updated to hierarchical format');
+    }
+}
+
+// Save data with proper redundancy
+function saveData() {
+    // 1. Save to localStorage immediately (fast, reliable)
+    try {
+        localStorage.setItem('inzuData', JSON.stringify(data));
+        localStorage.setItem('lastSaved', new Date().toLocaleString());
+        console.log('✅ Saved to localStorage');
+    } catch (error) {
+        console.error('❌ Failed to save to localStorage:', error);
+    }
+    
+    // 2. Save to Firebase in background (async, don't wait)
+    if (currentUser) {
+        saveToFirebaseOnly(data);
+    } else {
+        console.log('⚠️ No user logged in - data saved locally only');
+        showNotification('⚠️ Please sign in to enable cloud backup', 'warning');
+    }
+    
+    // 3. Update UI
+    updateLastSaved();
+    updateBackupInfo();
+    showSaveIndicator();
+}
+
+// Separate Firebase-only save function
+async function saveToFirebaseOnly(dataToSave) {
+    if (!currentUser) return;
+    
+    try {
+        console.log('📤 Saving to Firebase...');
+        updateSyncStatus('syncing');
+        
+        const dataRef = ref(database, `users/${currentUser.uid}/rentalData`);
+        await set(dataRef, dataToSave);
+        
+        console.log('✅ Data saved to Firebase');
+        updateSyncStatus('synced');
+        
+    } catch (error) {
+        console.error('❌ Firebase save failed:', error);
+        updateSyncStatus('error');
+        
+        if (error.code === 'unavailable') {
+            showNotification('⚠️ No internet connection - Data saved locally only', 'warning');
+        } else {
+            showNotification('⚠️ Cloud backup failed - Data saved locally', 'warning');
+        }
+    }
+}
+
+// Monitor online/offline status
+window.addEventListener('online', () => {
+    isOnline = true;
+    updateSyncStatus('syncing');
+    saveData(); // Sync any offline changes
+});
+
+window.addEventListener('offline', () => {
+    isOnline = false;
+    showNotification('You are offline - changes saved locally');
+});
+
+// PWA Auto-Update Detection with User Permission
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+            .then(reg => {
+                console.log('Service Worker registered with scope:', reg.scope);
+                
+                // Check for updates immediately on load
+                reg.update();
+                
+                // Check for updates every 60 seconds
+                setInterval(() => {
+                    reg.update();
+                }, 60000);
+
+                // Listen for new service worker
+                reg.addEventListener('updatefound', () => {
+                    const newWorker = reg.installing;
+                    console.log('New service worker found');
+                    
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            console.log('New service worker installed and ready');
+                            showUpdatePrompt();
+                        }
+                    });
+                });
+                
+                // Check if there's already a waiting service worker (update available)
+                if (reg.waiting) {
+                    console.log('Service worker already waiting - update available');
+                    showUpdatePrompt();
+                }
+                
+                // Store registration for version checking
+                window.swRegistration = reg;
+            })
+            .catch(error => {
+                console.error('Service Worker registration failed:', error);
+            });
+    });
+
+    // Listen for controlling service worker changes
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        console.log('Service worker controller changed - reloading page');
+        window.location.reload();
+    });
+}
+
+// Check for app updates on page visibility change (when user returns to tab)
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && window.swRegistration) {
+        console.log('Page became visible - checking for updates');
+        window.swRegistration.update();
+    }
+});
+
+// Show update prompt to user
+function showUpdatePrompt() {
+    // Show update status in menu
+    const updateStatus = document.getElementById('updateStatus');
+    const updateButton = document.getElementById('updateButton');
+    
+    if (updateStatus) updateStatus.classList.remove('hidden');
+    if (updateButton) updateButton.classList.remove('hidden');
+    
+    // Also show the floating prompt (existing behavior)
+    const updatePrompt = document.createElement('div');
+    updatePrompt.className = 'update-prompt';
+    updatePrompt.innerHTML = `
+        <div class="update-prompt-content">
+            <div class="update-prompt-icon">🔄</div>
+            <div class="update-prompt-text">
+                <strong>App Update Available</strong>
+                <p>A new version of Inzu is ready with improvements and bug fixes.</p>
+            </div>
+            <div class="update-prompt-actions">
+                <button class="btn btn-secondary" onclick="dismissUpdate(this)">Later</button>
+                <button class="btn btn-primary" onclick="applyUpdate()">Update Now</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(updatePrompt);
+    
+    // Auto-show the prompt with animation
+    setTimeout(() => {
+        updatePrompt.classList.add('show');
+    }, 100);
+}
+
+// Update current version display
+async function updateVersionDisplay() {
+    const currentVersionEl = document.getElementById('currentVersion');
+    const footerVersionEl = document.getElementById('footerVersion');
+    
+    // Try to get version from service worker first
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        try {
+            const messageChannel = new MessageChannel();
+            navigator.serviceWorker.controller.postMessage(
+                { type: 'GET_VERSION' },
+                [messageChannel.port2]
+            );
+            
+            messageChannel.port1.onmessage = (event) => {
+                if (event.data.version) {
+                    if (currentVersionEl) currentVersionEl.textContent = event.data.version;
+                    if (footerVersionEl) footerVersionEl.textContent = event.data.version;
+                }
+            };
+        } catch (error) {
+            console.log('Could not get version from service worker:', error);
+        }
+    }
+    
+    // Fallback to hardcoded version
+    const fallbackVersion = '1.0.0';
+    if (currentVersionEl && currentVersionEl.textContent === fallbackVersion) {
+        currentVersionEl.textContent = fallbackVersion;
+    }
+    if (footerVersionEl && footerVersionEl.textContent === fallbackVersion) {
+        footerVersionEl.textContent = fallbackVersion;
+    }
+}
+
+// Simple diagnostic to check action row state
+function checkActionRows() {
+    console.log('🔍 === ACTION ROWS DIAGNOSTIC ===');
+    const allTabs = ['tenants', 'monthly', 'expenses', 'moveouts2', 'moveouts', 'queries'];
+    
+    allTabs.forEach(tabName => {
+        const tab = document.getElementById(tabName);
+        if (tab) {
+            const actionRow = tab.querySelector('.action-buttons-row');
+            const button = tab.querySelector('.toggle-btn');
+            
+            console.log(`📋 Tab: ${tabName}`);
+            console.log(`  - Action row exists: ${!!actionRow}`);
+            console.log(`  - Action row hidden: ${actionRow ? actionRow.classList.contains('hidden') : 'N/A'}`);
+            console.log(`  - Action row display: ${actionRow ? window.getComputedStyle(actionRow).display : 'N/A'}`);
+            console.log(`  - Button exists: ${!!button}`);
+            console.log(`  - Button display: ${button ? window.getComputedStyle(button).display : 'N/A'}`);
+            console.log(`  - Button visible: ${button ? window.getComputedStyle(button).visibility : 'N/A'}`);
+            console.log('');
+        }
+    });
+}
+
+// Expose diagnostic function
+window.checkActionRows = checkActionRows;
+
+// Add this to script.js to diagnose the button visibility issue
+function diagnoseButtonVisibility() {
+    console.log('🔍 DIAGNOSIS: Checking button visibility...');
+    
+    // Check all action rows
+    const actionRows = document.querySelectorAll('.action-buttons-row');
+    console.log(`Total action rows: ${actionRows.length}`);
+    
+    actionRows.forEach((row, index) => {
+        const tabName = row.closest('.tab-content')?.id || 'unknown';
+        console.log(`Action row ${index} in tab "${tabName}":`);
+        console.log(`  - Hidden class: ${row.classList.contains('hidden')}`);
+        console.log(`  - Computed display: ${window.getComputedStyle(row).display}`);
+        console.log(`  - Computed visibility: ${window.getComputedStyle(row).visibility}`);
+    });
+    
+    // Check specific buttons
+    const buttons = ['moveoutToggleBtn', 'queryToggleBtn'];
+    buttons.forEach(btnId => {
+        const btn = document.getElementById(btnId);
+        console.log(`\nButton "${btnId}":`);
+        console.log(`  - Exists: ${!!btn}`);
+        if (btn) {
+            console.log(`  - Text: "${btn.textContent}"`);
+            console.log(`  - Classes: ${btn.className}`);
+            console.log(`  - Computed display: ${window.getComputedStyle(btn).display}`);
+            console.log(`  - Computed visibility: ${window.getComputedStyle(btn).visibility}`);
+            console.log(`  - Parent display: ${window.getComputedStyle(btn.parentElement).display}`);
+        }
+    });
+}
+
+// Expose diagnostic function
+window.diagnoseButtonVisibility = diagnoseButtonVisibility;
+
+// Initialize version display when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    updateVersionDisplay();
+    
+    // Test button functionality
+    setTimeout(() => {
+        const moveOutBtn = document.getElementById('moveoutToggleBtn');
+        const queryBtn = document.getElementById('queryToggleBtn');
+        console.log('🔍 Button elements found:', {
+            moveOutBtn: !!moveOutBtn,
+            queryBtn: !!queryBtn,
+            moveOutBtnText: moveOutBtn?.textContent,
+            queryBtnText: queryBtn?.textContent
+        });
+    }, 2000);
+});
+
+// Dismiss update prompt
+function dismissUpdate(button) {
+    const prompt = button.closest('.update-prompt');
+    prompt.classList.remove('show');
+    setTimeout(() => {
+        prompt.remove();
+    }, 500); // Longer delay to match CSS transition
+}
+
+// Apply update
+function applyUpdate() {
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then(reg => {
+            // Tell the new service worker to skip waiting
+            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        });
+    }
+}
+
+// ===== PROPERTY MANAGEMENT FUNCTIONS =====
+function showAddPropertyForm() {
+    document.getElementById('addPropertyForm').classList.remove('hidden');
+    document.getElementById('propertyName').focus();
+}
+
+function hideAddPropertyForm() {
+    document.getElementById('addPropertyForm').classList.add('hidden');
+    document.getElementById('propertyForm').reset();
+}
+
+function savePropertyInfo() {
+    const propertyName = document.getElementById('propertyName').value.trim();
+    const propertyAddress = document.getElementById('propertyAddress').value.trim();
+    const propertyType = document.getElementById('propertyType').value;
+    const propertyUnits = document.getElementById('propertyUnits').value;
+    const propertyDescription = document.getElementById('propertyDescription').value.trim();
+
+    if (!propertyName || !propertyAddress || !propertyType || !propertyUnits) {
+        showNotification('Please fill in all required property fields');
+        return;
+    }
+
+    const property = {
+        id: Date.now(),
+        name: propertyName,
+        address: propertyAddress,
+        type: propertyType,
+        units: parseInt(propertyUnits),
+        description: propertyDescription,
+        tenants: [],        // 🔑 REQUIRED: Always initialize
+        monthly: [],         // 🔑 REQUIRED: Always initialize
+        expenses: [],        // 🔑 REQUIRED: Always initialize
+        moveOuts: [],         // 🔑 REQUIRED: Always initialize
+        queries: [],          // 🔑 REQUIRED: Always initialize
+        createdAt: new Date().toISOString()
+    };
+
+    data.properties.push(property);
+    saveData();
+    renderProperties();
+    hideAddPropertyForm();
+    showToast('Property added successfully', 'success');
+}
+
+function selectProperty(propertyId) {
+    const property = data.properties.find(p => p.id === propertyId);
+    data.selectedPropertyId = propertyId;
+    saveData();
+    renderProperties();
+    
+    // Show property management navigation
+    document.getElementById('propertyNavigation').style.display = 'flex';
+    
+    // Show action buttons rows in all property management tabs
+    const actionRows = document.querySelectorAll('.action-buttons-row');
+    console.log('🔍 Found action rows:', actionRows.length);
+    actionRows.forEach((row, index) => {
+        console.log(`🔍 Action row ${index}:`, row);
+        console.log(`🔍 Classes before:`, row.className);
+        row.classList.remove('hidden');
+        console.log(`🔍 Classes after:`, row.className);
+        console.log(`🔍 Display style:`, window.getComputedStyle(row).display);
+    });
+    
+    // Force show specific action rows for Move Outs and Queries
+    const moveOutActionRow = document.querySelector('#moveouts .action-buttons-row');
+    const queryActionRow = document.querySelector('#queries .action-buttons-row');
+    
+    if (moveOutActionRow) {
+        console.log('🔍 Move Out action row found:', moveOutActionRow);
+        moveOutActionRow.classList.remove('hidden');
+        moveOutActionRow.style.display = 'flex';
+        
+        // Check if the button exists and is visible
+        const moveOutButton = document.getElementById('moveoutToggleBtn');
+        if (moveOutButton) {
+            console.log('✅ Move Out button found:', moveOutButton);
+            console.log('🔍 Button text:', moveOutButton.textContent);
+            console.log('🔍 Button display:', window.getComputedStyle(moveOutButton).display);
+            console.log('🔍 Button visibility:', window.getComputedStyle(moveOutButton).visibility);
+        } else {
+            console.log('❌ Move Out button NOT found');
+        }
+    } else {
+        console.log('❌ Move Out action row NOT found');
+    }
+    
+    if (queryActionRow) {
+        console.log('🔍 Query action row found:', queryActionRow);
+        queryActionRow.classList.remove('hidden');
+        queryActionRow.style.display = 'flex';
+        
+        // Check if the button exists and is visible
+        const queryButton = document.getElementById('queryToggleBtn');
+        if (queryButton) {
+            console.log('✅ Query button found:', queryButton);
+            console.log('🔍 Button text:', queryButton.textContent);
+            console.log('🔍 Button display:', window.getComputedStyle(queryButton).display);
+            console.log('🔍 Button visibility:', window.getComputedStyle(queryButton).visibility);
+        } else {
+            console.log('❌ Query button NOT found');
+        }
+    } else {
+        console.log('❌ Query action row NOT found');
+    }
+    
+    // Update all other tabs to show only data for selected property
+    renderAllEntries();
+    updateTenantSelects();
+    
+    showNotification(`Now managing: ${property ? property.name : 'Property'}`);
+    
+    // Update unit dropdown for new tenant form
+    populateUnitDropdown();
+    
+    // Switch to tenants tab after selecting property
+    const tenantsTab = document.querySelector('#propertyNavigation button[onclick*="tenants"]');
+    if (tenantsTab) {
+        showTab('tenants', tenantsTab);
+    }
+}
+
+function backToProperties() {
+    data.selectedPropertyId = null;
+    saveData();
+    
+    // Hide property management navigation
+    document.getElementById('propertyNavigation').style.display = 'none';
+    
+    // Hide action buttons rows in all property management tabs
+    const actionRows = document.querySelectorAll('.action-buttons-row');
+    actionRows.forEach(row => {
+        row.classList.add('hidden');
+    });
+    
+    showNotification('Back to Properties');
+}
+
+function renderProperties() {
+    console.log('🔍 renderProperties called');
+    const container = document.getElementById('propertiesList');
+    console.log('🔍 propertiesList container:', container);
+    
+    if (!container) {
+        console.log('❌ propertiesList container not found!');
+        return;
+    }
+    
+    console.log('🔍 Total properties:', data.properties?.length || 0);
+    
+    if (!data.properties || data.properties.length === 0) {
+        console.log('🔍 Showing empty state for properties');
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🏢</div>
+                <div class="empty-state-text">No properties yet</div>
+                <div class="empty-state-subtext">Add your first property to get started</div>
+            </div>
+        `;
+        return;
+    }
+    
+    console.log('🔍 Rendering properties list');
+    container.innerHTML = data.properties.map(property => `
+        <div class="property-item ${data.selectedPropertyId === property.id ? 'selected' : ''}" onclick="selectProperty('${property.id}')">
+            <div class="property-info">
+                <div class="property-name">${property.name}</div>
+                <div class="property-details">
+                    ${property.address || 'No address'} • ${property.tenants?.length || 0} tenants
+                </div>
+                ${property.description ? `<div class="property-description">${property.description}</div>` : ''}
+            </div>
+            <div class="property-actions">
+                <button class="btn btn-small btn-secondary" onclick="event.stopPropagation(); editProperty('${property.id}')">Edit</button>
+                <button class="btn btn-small btn-danger" onclick="event.stopPropagation(); deleteProperty('${property.id}')">Delete</button>
+            </div>
+        </div>
+    `).join('');
+    
+    console.log('✅ renderProperties completed');
+}
+
+function deleteProperty(propertyId) {
+    if (!confirm('Are you sure you want to delete this property? All associated tenant data will also be deleted.')) return;
+    
+    data.properties = data.properties.filter(p => p.id !== propertyId);
+    
+    if (data.selectedPropertyId === propertyId) {
+        data.selectedPropertyId = null;
+    }
+    
+    saveData();
+    renderProperties();
+    renderAllEntries();
+    updateTenantSelects();
+    showNotification('Property deleted successfully!');
+}
+
+function getSelectedProperty() {
+    if (!data.selectedPropertyId) return null;
+    return data.properties.find(p => p.id === data.selectedPropertyId);
+}
+
+// Property editing functions
+function editProperty(propertyId) {
+    const property = data.properties.find(p => p.id === propertyId);
+    if (!property) return;
+
+    editingPropertyId = propertyId;
+    
+    // Populate edit form with property data
+    document.getElementById('editPropertyName').value = property.name || '';
+    document.getElementById('editPropertyAddress').value = property.address || '';
+    document.getElementById('editPropertyType').value = property.type || '';
+    document.getElementById('editPropertyUnits').value = property.units || 1;
+    document.getElementById('editPropertyDescription').value = property.description || '';
+    
+    // Show edit overlay
+    document.getElementById('propertyEditOverlay').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    
+    // Focus on first field
+    document.getElementById('editPropertyName').focus();
+}
+
+function cancelPropertyEdit() {
+    editingPropertyId = null;
+    document.getElementById('propertyEditOverlay').classList.add('hidden');
+    document.body.style.overflow = '';
+    document.getElementById('propertyEditForm').reset();
+}
+
+function updateProperty() {
+    if (!editingPropertyId) return;
+
+    const propertyName = document.getElementById('editPropertyName').value.trim();
+    const propertyAddress = document.getElementById('editPropertyAddress').value.trim();
+    const propertyType = document.getElementById('editPropertyType').value;
+    const propertyUnits = document.getElementById('editPropertyUnits').value;
+    const propertyDescription = document.getElementById('editPropertyDescription').value.trim();
+
+    if (!propertyName || !propertyAddress || !propertyType || !propertyUnits) {
+        showNotification('Please fill in all required property fields');
+        return;
+    }
+
+    const propertyIndex = data.properties.findIndex(p => p.id === editingPropertyId);
+    if (propertyIndex === -1) return;
+
+    // Update property data
+    data.properties[propertyIndex] = {
+        ...data.properties[propertyIndex],
+        name: propertyName,
+        address: propertyAddress,
+        type: propertyType,
+        units: parseInt(propertyUnits),
+        description: propertyDescription,
+        updatedAt: new Date().toISOString()
+    };
+
+    saveData();
+    renderProperties();
+    cancelPropertyEdit();
+    showToast('Property updated successfully', 'success');
+}
+
+// ===== TAB MANAGEMENT =====
+function showTab(tabName, buttonElement) {
+    console.log('🔍 showTab called with tabName:', tabName);
+    console.log('🔍 buttonElement:', buttonElement);
+    
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Remove active class from all buttons in both navigations
+    document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Add active class to clicked button (if provided)
+    if (buttonElement) {
+        buttonElement.classList.add('active');
+    }
+    
+    // Update specific tab content
+    if (tabName === 'property') {
+        console.log('🔍 Activating PROPERTY tab');
+        renderProperties();
+    } else if (tabName === 'tenants') {
+        console.log('🔍 Activating TENANTS tab');
+        renderTenants();
+    } else if (tabName === 'monthly') {
+        console.log('🔍 Activating MONTHLY tab');
+        renderMonthly();
+    } else if (tabName === 'expenses') {
+        console.log('🔍 Activating EXPENSES tab');
+        renderExpenses();
+    } else if (tabName === 'summary') {
+        console.log('🔍 Activating SUMMARY tab');
+        updateSummary();
+        
+        // CRITICAL: Show the action buttons row for Summary tab
+        const summaryActionRow = document.querySelector('#summary .action-buttons-row');
+        console.log('🔍 Looking for Summary action row:', summaryActionRow);
+        
+        if (summaryActionRow) {
+            console.log('🔍 Summary action row classes before:', summaryActionRow.className);
+            summaryActionRow.classList.remove('hidden');
+            console.log('🔍 Summary action row classes after:', summaryActionRow.className);
+            console.log('✅ Summary action row unhidden');
+        } else {
+            console.log('❌ Summary action row NOT found');
+        }
+        
+        // Force show all summary content with simple approach
+        const summaryTab = document.getElementById('summary');
+        if (summaryTab) {
+            summaryTab.style.display = 'block';
+            summaryTab.style.visibility = 'visible';
+            summaryTab.style.opacity = '1';
+            summaryTab.style.position = 'static';
+            console.log('✅ Simple Summary tab visibility applied');
+        }
+        
+        // Show summary cards specifically
+        const summaryCards = document.getElementById('summaryCards');
+        if (summaryCards) {
+            summaryCards.style.display = 'grid !important';
+            summaryCards.style.visibility = 'visible !important';
+            summaryCards.style.opacity = '1 !important';
+            summaryCards.style.height = 'auto !important';
+            console.log('✅ Forced summary cards visibility');
+        }
+        
+        // Show form cards
+        const formCards = summaryTab?.querySelectorAll('.form-card');
+        if (formCards) {
+            formCards.forEach((card, index) => {
+                card.style.display = 'block !important';
+                card.style.visibility = 'visible !important';
+                card.style.opacity = '1 !important';
+                console.log(`✅ Forced form card ${index} visibility`);
+            });
+        }
+        
+    } else if (tabName === 'backup') {
+        updateBackupInfo();
+    }
+}
+
+// Initialize navigation state
+function initializeNavigation() {
+    // Always start with Properties page for all users (fresh login)
+    // Clear any previously selected property to ensure clean start
+    data.selectedPropertyId = null;
+    // Don't save here - let the user's actual data persist
+    
+    // Show property navigation (hidden by default)
+    const propertyNav = document.getElementById('propertyNavigation');
+    if (propertyNav) {
+        propertyNav.style.display = 'none';
+    }
+    
+    // Hide inline back buttons in all property management tabs (check if they exist)
+    const backButtons = ['tenantsBackButton', 'monthlyBackButton', 'expensesBackButton', 'moveoutsBackButton', 'queriesBackButton'];
+    backButtons.forEach(btnId => {
+        const btn = document.getElementById(btnId);
+        if (btn) {
+            btn.style.display = 'none';
+        }
+    });
+    
+    // Show the properties tab content
+    showTab('property');
+}
+
+// ===== EVENT LISTENERS =====
+
+// ===== FORM INITIALIZATION =====
+function initializeForms() {
+    // Add new tenant form
+    const addTenantForm = document.getElementById('addTenantForm');
+    if (addTenantForm) {
+        addTenantForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            addNewTenant();
+        });
+    }
+
+    // Tenant form (for editing overlay)
+    document.getElementById('tenantForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        addTenant();
+    });
+
+    // Add file input change listeners for immediate display
+    document.getElementById('leaseDocument').addEventListener('change', function(e) {
+        const newFiles = e.target.files;
+        if (newFiles && newFiles.length > 0) {
+            // Combine existing files with new files (max 3)
+            const combinedFiles = [...window.existingLeaseFiles];
+            for (let i = 0; i < newFiles.length && combinedFiles.length < 3; i++) {
+                combinedFiles.push(newFiles[i]);
+            }
+            
+            // Create new FileList with combined files
+            const dt = new DataTransfer();
+            combinedFiles.forEach(file => dt.items.add(file));
+            this.files = dt.files;
+            
+            // Update existing files storage
+            window.existingLeaseFiles = combinedFiles;
+            
+            // Display files
+            let filesHtml = '<div>';
+            for (let i = 0; i < combinedFiles.length; i++) {
+                filesHtml += `
+                    <div>
+                        <span>${combinedFiles[i].name}</span>
+                        <button type="button" onclick="removeNewLeaseFile(${i})">×</button>
+                    </div>
+                `;
+            }
+            filesHtml += '</div>';
+            document.getElementById('leaseDocumentDisplay').innerHTML = filesHtml;
+            
+            // Update upload button state
+            const uploadBtn = document.getElementById('leaseUploadBtn');
+            if (combinedFiles.length >= 3) {
+                uploadBtn.disabled = true;
+                uploadBtn.style.opacity = '0.5';
+                uploadBtn.style.cursor = 'not-allowed';
+                uploadBtn.textContent = 'Max 3 files';
+            } else {
+                uploadBtn.disabled = false;
+                uploadBtn.style.opacity = '1';
+                uploadBtn.style.cursor = 'pointer';
+                uploadBtn.textContent = 'Upload';
+            }
+        }
+        
+        // Update change state
+        if (window.editingTenantId) {
+            hasTenantFormChanged = true;
+            updateTenantFormButtons();
+        }
+    });
+
+    document.getElementById('tenantIdDocument').addEventListener('change', function(e) {
+        const newFiles = e.target.files;
+        if (newFiles && newFiles.length > 0) {
+            // Combine existing files with new files (max 3)
+            const combinedFiles = [...window.existingIdFiles];
+            for (let i = 0; i < newFiles.length && combinedFiles.length < 3; i++) {
+                combinedFiles.push(newFiles[i]);
+            }
+            
+            // Create new FileList with combined files
+            const dt = new DataTransfer();
+            combinedFiles.forEach(file => dt.items.add(file));
+            this.files = dt.files;
+            
+            // Update existing files storage
+            window.existingIdFiles = combinedFiles;
+            
+            // Display files
+            let filesHtml = '<div>';
+            for (let i = 0; i < combinedFiles.length; i++) {
+                filesHtml += `
+                    <div>
+                        <span>${combinedFiles[i].name}</span>
+                        <button type="button" onclick="removeNewFile(${i})">×</button>
+                    </div>
+                `;
+            }
+            filesHtml += '</div>';
+            document.getElementById('tenantIdDocumentDisplay').innerHTML = filesHtml;
+            
+            // Update upload button state
+            const uploadBtn = document.getElementById('idUploadBtn');
+            if (combinedFiles.length >= 3) {
+                uploadBtn.disabled = true;
+                uploadBtn.style.opacity = '0.5';
+                uploadBtn.style.cursor = 'not-allowed';
+                uploadBtn.textContent = 'Max 3 files';
+            } else {
+                uploadBtn.disabled = false;
+                uploadBtn.style.opacity = '1';
+                uploadBtn.style.cursor = 'pointer';
+                uploadBtn.textContent = 'Upload';
+            }
+        }
+        
+        // Update change state
+        if (window.editingTenantId) {
+            hasTenantFormChanged = true;
+            updateTenantFormButtons();
+        }
+    });
+
+    console.log('🚀 Event listeners initialization starting...');
+    
+    // Add change detection listeners to all form fields
+    const formFields = ['tenantName', 'tenantUnit', 'tenantRent', 'tenantPhone', 'tenantEmail', 
+                      'tenantSince', 'depositPaid', 'tenantNotes', 'electricityMeter', 
+                      'electricityBalance', 'waterMeter', 'waterBalance', 'leaseDocument', 'tenantIdDocument'];
+    
+    formFields.forEach(fieldId => {
+        const field = document.getElementById(fieldId);
+        if (field) {
+            field.addEventListener('input', () => {
+                const currentState = JSON.stringify(Array.from(new FormData(document.getElementById('tenantForm'))));
+                hasTenantFormChanged = currentState !== tenantFormInitialState;
+                console.log('🔍 Input change detected:', hasTenantFormChanged);
+                console.log('🔍 Current state:', currentState);
+                console.log('🔍 Initial state:', tenantFormInitialState);
+                updateTenantFormButtons();
+            });
+            field.addEventListener('change', () => {
+                const currentState = JSON.stringify(Array.from(new FormData(document.getElementById('tenantForm'))));
+                hasTenantFormChanged = currentState !== tenantFormInitialState;
+                console.log('🔍 Change event detected:', hasTenantFormChanged);
+                updateTenantFormButtons();
+            });
+        }
+    });
+    
+    // Special handling for file inputs since FormData doesn't capture them properly
+    const fileInputs = ['leaseDocument', 'tenantIdDocument'];
+    fileInputs.forEach(fieldId => {
+        const field = document.getElementById(fieldId);
+        if (field) {
+            field.addEventListener('change', () => {
+                console.log('🔍 File input changed:', fieldId, 'files length:', field.files.length);
+                // Force change detection for file uploads
+                hasTenantFormChanged = true;
+                console.log('🔍 File upload change detected:', hasTenantFormChanged);
+                updateTenantFormButtons();
+            });
+        }
+    });
+    
+    // Add proper event listener for Cancel button
+    const cancelBtn = document.getElementById('tenantCancelBtn');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', cancelTenantEdit);
+    }
+    
+    // Monthly form
+    document.getElementById('monthlyForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        addMonthly();
+    });
+
+    // Monthly edit form
+    const monthlyEditForm = document.getElementById('monthlyEditForm');
+    if (monthlyEditForm) {
+        monthlyEditForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            addMonthly();
+        });
+    }
+
+    // Add change detection listeners to monthly form fields
+    const monthlyFormFields = ['monthlyTenant', 'monthlyAmount', 'monthlyDate', 'monthlyNotes'];
+    const monthlyEditFormFields = ['monthlyTenantEdit', 'monthlyAmountEdit', 'monthlyDateEdit', 'monthlyNotesEdit'];
+    
+    monthlyFormFields.forEach(fieldId => {
+        const field = document.getElementById(fieldId);
+        if (field) {
+            field.addEventListener('input', () => {
+                const currentState = JSON.stringify(Array.from(new FormData(document.getElementById('monthlyForm'))));
+                hasMonthlyFormChanged = currentState !== monthlyFormInitialState;
+                updateMonthlyFormButtons();
+            });
+            field.addEventListener('change', () => {
+                const currentState = JSON.stringify(Array.from(new FormData(document.getElementById('monthlyForm'))));
+                hasMonthlyFormChanged = currentState !== monthlyFormInitialState;
+                updateMonthlyFormButtons();
+            });
+        }
+    });
+
+    monthlyEditFormFields.forEach(fieldId => {
+        const field = document.getElementById(fieldId);
+        if (field) {
+            field.addEventListener('input', () => {
+                const currentState = JSON.stringify(Array.from(new FormData(document.getElementById('monthlyEditForm'))));
+                hasMonthlyFormChanged = currentState !== monthlyFormInitialState;
+                updateMonthlyFormButtons();
+            });
+            field.addEventListener('change', () => {
+                const currentState = JSON.stringify(Array.from(new FormData(document.getElementById('monthlyEditForm'))));
+                hasMonthlyFormChanged = currentState !== monthlyFormInitialState;
+                updateMonthlyFormButtons();
+            });
+        }
+    });
+    
+    // Add proper event listener for Cancel button
+    const monthlyCancelBtn = document.getElementById('monthlyCancelBtn');
+    console.log('🔍 monthlyCancelBtn found:', !!monthlyCancelBtn);
+    if (monthlyCancelBtn) {
+        monthlyCancelBtn.addEventListener('click', function() {
+            console.log('🔄 Cancel button clicked!');
+            cancelMonthlyEdit();
+        });
+        console.log('✅ Cancel button event listener attached');
+    } else {
+        console.error('❌ monthlyCancelBtn not found!');
+    }
+
+    // Expense form
+    document.getElementById('expenseForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        addExpense();
+    });
+
+    // Add change detection listeners to expense form fields
+    const expenseFormFields = ['expenseCategory', 'expenseDescription', 'expenseReference', 'expenseAmount', 'expenseDate'];
+    
+    expenseFormFields.forEach(fieldId => {
+        const field = document.getElementById(fieldId);
+        if (field) {
+            field.addEventListener('input', () => {
+                const currentState = JSON.stringify(Array.from(new FormData(document.getElementById('expenseForm'))));
+                hasExpenseFormChanged = currentState !== expenseFormInitialState;
+                updateExpenseFormButtons();
+            });
+            field.addEventListener('change', () => {
+                const currentState = JSON.stringify(Array.from(new FormData(document.getElementById('expenseForm'))));
+                hasExpenseFormChanged = currentState !== expenseFormInitialState;
+                updateExpenseFormButtons();
+            });
+        }
+    });
+    
+    // Add proper event listener for Cancel button
+    const expenseCancelBtn = document.getElementById('expenseCancelBtn');
+    if (expenseCancelBtn) {
+        expenseCancelBtn.addEventListener('click', cancelExpenseEdit);
+    }
+
+    // Property form
+    const propertyForm = document.getElementById('propertyForm');
+    if (propertyForm) {
+        propertyForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            savePropertyInfo();
+        });
+    }
+
+    // Property edit form
+    const propertyEditForm = document.getElementById('propertyEditForm');
+    if (propertyEditForm) {
+        propertyEditForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            updateProperty();
+        });
+    }
+
+    // Query form
+    const qForm = document.getElementById('queryForm');
+    if (qForm) {
+        qForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            addQuery();
+        });
+    }
+}
+
+// ===== TENANT FUNCTIONS =====
+function populateUnitDropdown() {
+    const unitSelect = document.getElementById('newTenantUnit');
+    if (!unitSelect) return;
+    
+    // Clear existing options
+    unitSelect.innerHTML = '<option value="">Select unit...</option>';
+    
+    if (!data.selectedPropertyId) {
+        return;
+    }
+    
+    const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
+    if (!selectedProperty) {
+        return;
+    }
+    
+    const totalUnits = selectedProperty.units || 1;
+    const propertyTenants = selectedProperty.tenants || [];
+    const occupiedUnits = new Set(propertyTenants.filter(t => !t.movedOut).map(t => t.unit));
+    
+    // Generate unit options (1 to totalUnits)
+    for (let i = 1; i <= totalUnits; i++) {
+        const unitNumber = i.toString();
+        if (!occupiedUnits.has(unitNumber)) {
+            const option = document.createElement('option');
+            option.value = unitNumber;
+            option.textContent = `Unit ${unitNumber}`;
+            unitSelect.appendChild(option);
+        }
+    }
+    
+    // If no units available, show message
+    if (unitSelect.options.length === 1) {
+        const option = document.createElement('option');
+        option.value = "";
+        option.textContent = "No units available";
+        option.disabled = true;
+        unitSelect.appendChild(option);
+    }
+}
+
+// Setup file upload handlers for new tenant form
+function setupFileUploadHandlers() {
+    // Lease document upload handler
+    const leaseInput = document.getElementById('newLeaseDocument');
+    const leaseDisplay = document.getElementById('newLeaseDocumentDisplay');
+    
+    if (leaseInput && leaseDisplay) {
+        leaseInput.addEventListener('change', function(e) {
+            handleFileUpload(e.target.files, leaseDisplay, 'Lease');
+        });
+    }
+    
+    // ID document upload handler
+    const idInput = document.getElementById('newTenantIdDocument');
+    const idDisplay = document.getElementById('newTenantIdDocumentDisplay');
+    
+    if (idInput && idDisplay) {
+        idInput.addEventListener('change', function(e) {
+            handleFileUpload(e.target.files, idDisplay, 'ID');
+        });
+    }
+}
+
+// Handle file upload display
+function handleFileUpload(files, displayElement, documentType) {
+    if (!displayElement) return;
+    
+    displayElement.innerHTML = '';
+    
+    if (files.length === 0) {
+        return;
+    }
+    
+    const maxFiles = 3;
+    const filesToShow = Math.min(files.length, maxFiles);
+    
+    for (let i = 0; i < filesToShow; i++) {
+        const file = files[i];
+        const fileDiv = document.createElement('div');
+        fileDiv.className = 'uploaded-file';
+        fileDiv.innerHTML = `
+            <div class="file-info">
+                <span class="file-name">📄 ${file.name}</span>
+                <span class="file-size">${formatFileSize(file.size)}</span>
+            </div>
+            <button type="button" class="remove-file" onclick="removeUploadedFile(this, '${documentType}')">×</button>
+        `;
+        displayElement.appendChild(fileDiv);
+    }
+    
+    if (files.length > maxFiles) {
+        const warningDiv = document.createElement('div');
+        warningDiv.className = 'upload-warning';
+        warningDiv.textContent = `Only first ${maxFiles} files will be saved`;
+        displayElement.appendChild(warningDiv);
+    }
+}
+
+// Format file size for display
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// Remove uploaded file from display
+function removeUploadedFile(button, documentType) {
+    const fileDiv = button.parentElement;
+    const displayElement = fileDiv.parentElement;
+    fileDiv.remove();
+    
+    // Clear the corresponding file input
+    const inputId = documentType === 'Lease' ? 'newLeaseDocument' : 'newTenantIdDocument';
+    const input = document.getElementById(inputId);
+    if (input) {
+        input.value = '';
+    }
+}
+
+function toggleTenantForm() {
+    const el = document.getElementById('tenantFormCollapsible');
+    const btn = document.getElementById('tenantToggleBtn');
+    if (!el) return;
+
+    const isCollapsed = el.classList.contains('collapsed');
+    if (isCollapsed) {
+        el.classList.remove('collapsed');
+        // Allow transition by setting explicit maxHeight
+        el.style.maxHeight = el.scrollHeight + 'px';
+        el.style.opacity = '1';
+        if (btn) btn.textContent = '➖ Hide Add Tenant';
+        
+        // Populate unit dropdown when form opens
+        populateUnitDropdown();
+        
+        // Setup file upload handlers
+        setupFileUploadHandlers();
+    } else {
+        // Smoothly collapse
+        el.style.maxHeight = el.scrollHeight + 'px';
+        requestAnimationFrame(() => {
+            el.classList.add('collapsed');
+            el.style.maxHeight = '0';
+            el.style.opacity = '0';
+        });
+        if (btn) btn.textContent = '➕ Add New Tenant';
+    }
+}
+
+function toggleMonthlyForm() {
+    const el = document.getElementById('monthlyFormCollapsible');
+    const btn = document.getElementById('monthlyToggleBtn');
+    if (!el) return;
+
+    const isCollapsed = el.classList.contains('collapsed');
+    if (isCollapsed) {
+        el.classList.remove('collapsed');
+        el.style.maxHeight = el.scrollHeight + 'px';
+        el.style.opacity = '1';
+        if (btn) btn.textContent = '➖ Hide Add Monthly Receipt';
+        
+        // Populate tenant dropdown
+        updateTenantSelects();
+    } else {
+        el.style.maxHeight = el.scrollHeight + 'px';
+        requestAnimationFrame(() => {
+            el.classList.add('collapsed');
+            el.style.maxHeight = '0';
+            el.style.opacity = '0';
+        });
+        if (btn) btn.textContent = '➕ Add Monthly Receipt';
+    }
+}
+
+function toggleExpenseForm() {
+    const el = document.getElementById('expenseFormCollapsible');
+    const btn = document.getElementById('expenseToggleBtn');
+    if (!el) return;
+
+    const isCollapsed = el.classList.contains('collapsed');
+    if (isCollapsed) {
+        el.classList.remove('collapsed');
+        el.style.maxHeight = el.scrollHeight + 'px';
+        el.style.opacity = '1';
+        if (btn) btn.textContent = '➖ Hide Add Expense';
+    } else {
+        el.style.maxHeight = el.scrollHeight + 'px';
+        requestAnimationFrame(() => {
+            el.classList.add('collapsed');
+            el.style.maxHeight = '0';
+            el.style.opacity = '0';
+        });
+        if (btn) btn.textContent = '➕ Add Expense';
+    }
+}
+
+// TEST: Complete duplicate of Expenses functionality for Move Outs 2
+function toggleMoveOut2Form() {
+    const el = document.getElementById('moveout2FormCollapsible');
+    const btn = document.getElementById('moveout2ToggleBtn');
+    if (!el) return;
+
+    const isCollapsed = el.classList.contains('collapsed');
+    if (isCollapsed) {
+        el.classList.remove('collapsed');
+        el.style.maxHeight = el.scrollHeight + 'px';
+        el.style.opacity = '1';
+        if (btn) btn.textContent = '➖ Hide Add Move-Out 2 (TEST)';
+    } else {
+        el.style.maxHeight = el.scrollHeight + 'px';
+        requestAnimationFrame(() => {
+            el.classList.add('collapsed');
+            el.style.maxHeight = '0';
+            el.style.opacity = '0';
+        });
+        if (btn) btn.textContent = '➕ Add Move-Out 2 (TEST)';
+    }
+}
+
+function addMoveOut2() {
+    // Validate that a property is selected
+    if (!data.selectedPropertyId) {
+        showNotification('Please select a property first!');
+        return;
+    }
+    
+    const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
+    if (!selectedProperty) {
+        showNotification('Selected property not found!');
+        return;
+    }
+    
+    // Ensure property moveOuts2 array exists
+    if (!selectedProperty.moveOuts2) selectedProperty.moveOuts2 = [];
+    
+    const moveOut2 = {
+        id: Date.now(),
+        tenant: document.getElementById('moveout2Tenant').value,
+        date: document.getElementById('moveout2Date').value,
+        deposit: document.getElementById('moveout2Deposit').value,
+        notes: document.getElementById('moveout2Notes').value,
+        createdAt: new Date().toISOString()
+    };
+
+    // Add to property's moveOuts2 array
+    selectedProperty.moveOuts2.push(moveOut2);
+    
+    // Save and update
+    saveData();
+    renderMoveOuts2();
+    updateTenantSelects();
+    updateSummary();
+    
+    // Reset form
+    document.getElementById('moveout2Form').reset();
+    
+    // Hide form
+    const formEl = document.getElementById('moveout2FormCollapsible');
+    const btn = document.getElementById('moveout2ToggleBtn');
+    formEl.style.maxHeight = formEl.scrollHeight + 'px';
+    requestAnimationFrame(() => {
+        formEl.classList.add('collapsed');
+        formEl.style.maxHeight = '0';
+        formEl.style.opacity = '0';
+    });
+    btn.textContent = '➕ Add Move-Out 2 (TEST)';
+    
+    showNotification('Move Out 2 recorded successfully!');
+}
+
+function renderMoveOuts2() {
+    const container = document.getElementById('moveouts2List');
+    
+    // Get moveOuts2 from selected property
+    let moveOuts2 = [];
+    
+    if (data.selectedPropertyId) {
+        const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
+        if (selectedProperty) {
+            moveOuts2 = selectedProperty.moveOuts2 || [];
+        }
+    }
+    
+    if (!moveOuts2 || moveOuts2.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🚚</div>
+                <div class="empty-state-text">No move outs recorded (TEST)</div>
+                <div class="empty-state-subtext">Track tenant move outs (TEST VERSION)</div>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = moveOuts2.slice().reverse().map(mo => `
+        <div class="entry-item">
+            <div class="entry-header">
+                <div class="entry-title">${mo.tenant}</div>
+                <div class="entry-amount">Ksh ${mo.deposit || 0}</div>
+            </div>
+            <div class="entry-details">
+                <div class="entry-date">${new Date(mo.date).toLocaleDateString()}</div>
+                <div class="entry-description">${mo.notes || 'No notes'}</div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function deleteMoveOut2(id) {
+    if (confirm('Are you sure you want to delete this move out 2?')) {
+        const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
+        if (selectedProperty && selectedProperty.moveOuts2) {
+            selectedProperty.moveOuts2 = selectedProperty.moveOuts2.filter(mo => mo.id !== id);
+            saveData();
+            renderMoveOuts2();
+            updateSummary();
+            showNotification('Move Out 2 deleted successfully!');
+        }
+    }
+}
+
+function toggleMoveOutForm() {
+    console.log('🔄 toggleMoveOutForm called');
+    const el = document.getElementById('moveoutFormCollapsible');
+    const btn = document.getElementById('moveoutToggleBtn');
+    console.log('🔍 MoveOut elements:', { el: !!el, btn: !!btn });
+    if (!el) return;
+
+    const isCollapsed = el.classList.contains('collapsed');
+    console.log('🔍 Is collapsed:', isCollapsed);
+    if (isCollapsed) {
+        el.classList.remove('collapsed');
+        el.style.maxHeight = el.scrollHeight + 'px';
+        el.style.opacity = '1';
+        if (btn) btn.textContent = '➖ Hide Add Move-Out';
+        
+        // Populate tenant dropdown
+        updateTenantSelects();
+    } else {
+        el.style.maxHeight = el.scrollHeight + 'px';
+        requestAnimationFrame(() => {
+            el.classList.add('collapsed');
+            el.style.maxHeight = '0';
+            el.style.opacity = '0';
+        });
+        if (btn) btn.textContent = '➕ Add Move-Out';
+    }
+}
+
+function toggleQueryForm() {
+    console.log('🔄 toggleQueryForm called');
+    const el = document.getElementById('queryFormCollapsible');
+    const btn = document.getElementById('queryToggleBtn');
+    console.log('🔍 Query elements:', { el: !!el, btn: !!btn });
+    if (!el) return;
+
+    const isCollapsed = el.classList.contains('collapsed');
+    console.log('🔍 Is collapsed:', isCollapsed);
+    if (isCollapsed) {
+        el.classList.remove('collapsed');
+        el.style.maxHeight = el.scrollHeight + 'px';
+        el.style.opacity = '1';
+        if (btn) btn.textContent = '➖ Hide Add Query';
+        
+        // Populate tenant dropdown
+        updateTenantSelects();
+    } else {
+        el.style.maxHeight = el.scrollHeight + 'px';
+        requestAnimationFrame(() => {
+            el.classList.add('collapsed');
+            el.style.maxHeight = '0';
+            el.style.opacity = '0';
+        });
+        if (btn) btn.textContent = '➕ Add Query';
+    }
+}
+
+// Add tenant
+function addNewTenant() {
+    if (!data.selectedPropertyId) {
+        showNotification('Please select a property first');
+        return;
+    }
+
+    const form = document.getElementById('addTenantForm');
+    if (!form) return;
+
+    // Get form values
+    const tenantName = document.getElementById('newTenantName').value.trim();
+    const tenantUnit = document.getElementById('newTenantUnit').value.trim();
+    const tenantRent = document.getElementById('newTenantRent').value;
+    const tenantPhone = document.getElementById('newTenantPhone').value.trim();
+    const tenantEmail = document.getElementById('newTenantEmail').value.trim();
+    const tenantSince = document.getElementById('newTenantSince').value;
+    const depositPaid = document.getElementById('newDepositPaid').value;
+    const electricityMeter = document.getElementById('newElectricityMeter').value.trim();
+    const electricityBalance = document.getElementById('newElectricityBalance').value;
+    const waterMeter = document.getElementById('newWaterMeter').value.trim();
+    const waterBalance = document.getElementById('newWaterBalance').value;
+    const tenantNotes = document.getElementById('newTenantNotes').value.trim();
+
+    // Handle document uploads
+    const leaseDocumentFiles = document.getElementById('newLeaseDocument').files;
+    const idDocumentFiles = document.getElementById('newTenantIdDocument').files;
+
+    // Validation
+    if (!tenantName || !tenantUnit || !tenantRent || !tenantSince) {
+        showNotification('Please fill in all required fields');
+        return;
+    }
+
+    // Validate that a unit was selected (not the placeholder)
+    if (!tenantUnit || tenantUnit === "") {
+        showNotification('Please select a unit');
+        return;
+    }
+
+    // Check for duplicate unit within the selected property
+    const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
+    if (!selectedProperty) {
+        showNotification('Please select a property first');
+        return;
+    }
+    
+    // No need to check for duplicate units since dropdown only shows available units
+    
+    // Check if property has reached its unit capacity
+    const propertyTenants = (selectedProperty.tenants || []);
+    const occupiedUnits = propertyTenants.filter(t => !t.movedOut).length;
+    const maxUnits = selectedProperty.units || 1;
+    
+    if (occupiedUnits >= maxUnits) {
+        showNotification(`Property has reached maximum capacity (${maxUnits} units). Cannot add more tenants.`);
+        return;
+    }
+
+    // Create new tenant object
+    const tenant = {
+        id: Date.now(),
+        name: tenantName,
+        unit: tenantUnit,
+        rent: Number(tenantRent),
+        phone: tenantPhone,
+        email: tenantEmail,
+        since: tenantSince,
+        depositPaid: Number(depositPaid) || 0,
+        electricityMeter: electricityMeter,
+        electricityBalance: Number(electricityBalance) || 0,
+        waterMeter: waterMeter,
+        waterBalance: Number(waterBalance) || 0,
+        notes: tenantNotes,
+        leaseDocuments: [],
+        idDocuments: [],
+        createdAt: new Date().toISOString()
+    };
+
+    // Process lease documents
+    if (leaseDocumentFiles && leaseDocumentFiles.length > 0) {
+        for (let i = 0; i < Math.min(leaseDocumentFiles.length, 3); i++) {
+            const file = leaseDocumentFiles[i];
+            tenant.leaseDocuments.push({
+                name: file.name,
+                type: file.type,
+                size: file.size,
+                lastModified: file.lastModified
+            });
+        }
+    }
+
+    // Process ID documents
+    if (idDocumentFiles && idDocumentFiles.length > 0) {
+        for (let i = 0; i < Math.min(idDocumentFiles.length, 3); i++) {
+            const file = idDocumentFiles[i];
+            tenant.idDocuments.push({
+                name: file.name,
+                type: file.type,
+                size: file.size,
+                lastModified: file.lastModified
+            });
+        }
+    }
+
+    // Add tenant to the selected property
+    if (!selectedProperty.tenants) {
+        selectedProperty.tenants = [];
+    }
+    selectedProperty.tenants.push(tenant);
+    
+    saveData();
+    // Update UI
+    renderTenants();
+    updateTenantSelects();
+
+    // Reset form and collapse
+    form.reset();
+    toggleTenantForm();
+
+    showNotification('Tenant added successfully!');
+}
+
+// Add tenant (for editing overlay)
+function addTenant() {
+    console.log('🔄 addTenant() called, editingTenantId:', window.editingTenantId);
+    console.log('🔍 data.properties exists:', !!data.properties);
+    console.log('🔍 data.properties length:', data.properties?.length);
+    
+    // 🔑 CRITICAL: Check editing state at the beginning
+    const wasEditing = window.editingTenantId !== null;
+    
+    const leaseFiles = document.getElementById('leaseDocument').files;
+    const idFiles = document.getElementById('tenantIdDocument').files;
+    
+    // Get form values
+    const name = document.getElementById('tenantName').value.trim();
+    const unit = document.getElementById('tenantUnit').value.trim();
+    const rent = document.getElementById('tenantRent').value;
+    const phone = document.getElementById('tenantPhone').value.trim();
+    const email = document.getElementById('tenantEmail').value.trim();
+    const since = document.getElementById('tenantSince').value;
+    const depositPaid = document.getElementById('depositPaid').value;
+    const notes = document.getElementById('tenantNotes').value.trim();
+    const electricityMeter = document.getElementById('electricityMeter') ? document.getElementById('electricityMeter').value.trim() : '';
+    const electricityBalance = document.getElementById('electricityBalance') ? parseFloat(document.getElementById('electricityBalance').value) || 0 : 0;
+    const waterMeter = document.getElementById('waterMeter') ? document.getElementById('waterMeter').value.trim() : '';
+    const waterBalance = document.getElementById('waterBalance') ? parseFloat(document.getElementById('waterBalance').value) || 0 : 0;
+    
+    // Validate required fields
+    if (!name) {
+        showNotification('Please enter tenant name');
+        return;
+    }
+    
+    if (!data.selectedPropertyId) {
+        showNotification('Please select a property first');
+        return;
+    }
+    
+    // Use safe helper to get property
+    const selectedProperty = getPropertyOrFail(data.selectedPropertyId);
+    if (!selectedProperty) {
+        showNotification('Selected property not found');
+        return;
+    }
+    
+    // 🔑 CRITICAL FIX: Ensure tenants array exists
+    if (!Array.isArray(selectedProperty.tenants)) {
+        console.warn('⚠️ Property missing tenants array, initializing:', selectedProperty.name);
+        selectedProperty.tenants = [];
+    }
+    
+    if (!unit) {
+        showNotification('Please enter unit name - this is required');
+        return;
+    }
+    
+    // Check if unit is already occupied (in the selected property)
+    const existingTenant = selectedProperty.tenants.find(t => 
+        t.unit.toLowerCase() === unit.toLowerCase() && 
+        !t.movedOut && 
+        t.id !== window.editingTenantId
+    );
+    if (existingTenant) {
+        showNotification(`Unit ${unit} is already occupied by ${existingTenant.name}`);
+        return;
+    }
+    
+    if (!rent || parseFloat(rent) <= 0) {
+        showNotification('Please enter a valid rent amount');
+        return;
+    }
+    
+    if (!since) {
+        showNotification('Please enter tenant since date');
+        return;
+    }
+    
+    console.log('✅ Validation passed, processing documents...');
+    
+    // Process multiple lease files
+    let leaseDocuments = [];
+    if (leaseFiles && leaseFiles.length > 0) {
+        console.log('🔍 Processing lease files, editingTenantId:', window.editingTenantId);
+        if (window.editingTenantId) {
+            // Editing mode: append new files to existing documents
+            const result = findTenantInAllProperties(window.editingTenantId);
+            const existingTenant = result?.tenant;
+            
+            console.log('🔍 existingTenant after search:', existingTenant);
+            const existingLeaseDocs = existingTenant?.leaseDocuments || [];
+            if (existingTenant?.leaseDocument && !existingLeaseDocs.length) {
+                // Convert old single format to array
+                existingLeaseDocs.push(existingTenant.leaseDocument);
+            }
+            
+            // Combine existing and new files (max 3)
+            leaseDocuments = [...existingLeaseDocs];
+            for (let i = 0; i < leaseFiles.length && leaseDocuments.length < 3; i++) {
+                leaseDocuments.push({
+                    name: leaseFiles[i].name,
+                    size: leaseFiles[i].size,
+                    type: leaseFiles[i].type,
+                    lastModified: leaseFiles[i].lastModified
+                });
+            }
+        } else {
+            // New tenant mode: just use the new files (max 3)
+            for (let i = 0; i < leaseFiles.length && i < 3; i++) {
+                leaseDocuments.push({
+                    name: leaseFiles[i].name,
+                    size: leaseFiles[i].size,
+                    type: leaseFiles[i].type,
+                    lastModified: leaseFiles[i].lastModified
+                });
+            }
+        }
+    } else if (window.editingTenantId) {
+        // Editing mode with no new files: keep existing documents
+        const result = findTenantInAllProperties(window.editingTenantId);
+        const existingTenant = result?.tenant;
+        if (existingTenant) {
+            leaseDocuments = existingTenant.leaseDocuments || [];
+            if (existingTenant.leaseDocument && !leaseDocuments.length) {
+                leaseDocuments = [existingTenant.leaseDocument];
+            }
+        }
+    }
+    
+    // Process multiple ID files
+    let idDocuments = [];
+    if (idFiles && idFiles.length > 0) {
+        if (window.editingTenantId) {
+            // Editing mode: append new files to existing documents
+            const result = findTenantInAllProperties(window.editingTenantId);
+            const existingTenant = result?.tenant;
+            const existingDocs = existingTenant?.idDocuments || [];
+            if (existingTenant?.idDocument && !existingDocs.length) {
+                // Convert old single format to array
+                existingDocs.push(existingTenant.idDocument);
+            }
+            
+            // Combine existing and new files (max 3)
+            idDocuments = [...existingDocs];
+            for (let i = 0; i < idFiles.length && idDocuments.length < 3; i++) {
+                idDocuments.push({
+                    name: idFiles[i].name,
+                    size: idFiles[i].size,
+                    type: idFiles[i].type,
+                    lastModified: idFiles[i].lastModified
+                });
+            }
+        } else {
+            // New tenant mode: just use the new files (max 3)
+            for (let i = 0; i < idFiles.length && i < 3; i++) {
+                idDocuments.push({
+                    name: idFiles[i].name,
+                    size: idFiles[i].size,
+                    type: idFiles[i].type,
+                    lastModified: idFiles[i].lastModified
+                });
+            }
+        }
+    } else if (window.editingTenantId) {
+        // Editing mode with no new files: keep existing documents
+        const result = findTenantInAllProperties(window.editingTenantId);
+        const existingTenant = result?.tenant;
+        if (existingTenant) {
+            idDocuments = existingTenant.idDocuments || [];
+            if (existingTenant.idDocument && !idDocuments.length) {
+                idDocuments = [existingTenant.idDocument];
+            }
+        }
+    }
+    
+    const tenant = {
+        id: window.editingTenantId || Date.now(),
+        propertyId: data.selectedPropertyId,
+        name: name,
+        unit: unit,
+        rent: rent,
+        phone: phone,
+        email: email,
+        since: since,
+        depositPaid: depositPaid,
+        notes: notes,
+        electricityMeter: electricityMeter,
+        electricityBalance: electricityBalance,
+        waterMeter: waterMeter,
+        waterBalance: waterBalance,
+        leaseDocuments: leaseDocuments,
+        idDocuments: idDocuments,
+        createdAt: new Date().toISOString()
+    };
+
+    console.log('🔍 Saving tenant, editingTenantId:', window.editingTenantId);
+    
+    if (window.editingTenantId) {
+        // Update existing tenant in hierarchical structure
+        console.log('🔄 Updating existing tenant:', window.editingTenantId);
+        const result = findTenantInAllProperties(window.editingTenantId);
+        if (result) {
+            const { property } = result;
+            const index = property.tenants.findIndex(t => t.id === window.editingTenantId);
+            if (index !== -1) {
+                console.log('✅ Found tenant to update in property:', property.name);
+                property.tenants[index] = tenant;
+                showNotification('Tenant updated successfully!');
+            }
+        }
+        window.editingTenantId = null;
+    } else {
+        // Add new tenant to selected property
+        console.log('➕ Adding new tenant to property:', selectedProperty.name);
+        selectedProperty.tenants.push(tenant);
+        showNotification('Tenant added successfully!');
+    }
+    
+    console.log('💾 Saving data...');
+    saveData();
+    renderTenants();
+    updateTenantSelects();
+    
+    // Handle form reset based on whether it was an edit or add operation
+    if (wasEditing) {
+        // This was an update, close the edit overlay and navigate back to tenants
+        document.getElementById('tenantEditOverlay').classList.add('hidden');
+        document.body.style.overflow = '';
+        
+        // Navigate back to tenants page
+        showTenantsView();
+        
+        showNotification('Tenant updated successfully!');
+    } else {
+        // This was a new tenant addition, reset form
+        document.getElementById('tenantForm').reset();
+        
+        // Reset form heading
+        document.getElementById('tenantFormTitle').textContent = 'Add New Tenant';
+        
+        // Hide cancel button
+        document.getElementById('tenantCancelBtn').classList.add('hidden');
+        
+        // Reset save button text
+        const tenantSaveBtn = document.querySelector('#tenantForm button[type="submit"]');
+        tenantSaveBtn.textContent = 'Save Tenant';
+        
+        // Reset document displays
+        document.getElementById('leaseDocumentDisplay').innerHTML = '';
+        document.getElementById('tenantIdDocumentDisplay').innerHTML = '';
+        
+        // Clear accumulated files
+        window.existingLeaseFiles = [];
+        window.existingIdFiles = [];
+        
+        window.idDocumentMode = 'new';
+    }
+}
+
+// ===== MONTHLY PAYMENT FUNCTIONS =====
+function addMonthly() {
+    // Validate that a property is selected
+    if (!data.selectedPropertyId) {
+        showNotification('Please select a property first!');
+        return;
+    }
+    
+    const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
+    if (!selectedProperty) {
+        showNotification('Selected property not found!');
+        return;
+    }
+    
+    // Ensure property monthly array exists
+    if (!selectedProperty.monthly) selectedProperty.monthly = [];
+    
+    // Determine which form to use based on edit mode
+    const isEditMode = window.editingMonthlyId !== null;
+    const formPrefix = isEditMode ? 'Edit' : '';
+    
+    const tenantId = document.getElementById('monthlyTenant' + formPrefix).value;
+    const amount = document.getElementById('monthlyAmount' + formPrefix).value;
+    const date = document.getElementById('monthlyDate' + formPrefix).value;
+    
+    // Validate tenant selection
+    if (!tenantId) {
+        showNotification('Please select a tenant first!');
+        return;
+    }
+    
+    // Validate amount
+    if (!amount || parseFloat(amount) <= 0) {
+        showNotification('Please enter a valid amount');
+        return;
+    }
+    
+    // Validate date
+    if (!date) {
+        showNotification('Please select a date');
+        return;
+    }
+    
+    const payment = {
+        id: window.editingMonthlyId || Date.now(),
+        tenantId: tenantId,
+        amount: amount,
+        date: date,
+        notes: document.getElementById('monthlyNotes' + formPrefix).value,
+        createdAt: new Date().toISOString()
+    };
+
+    if (window.editingMonthlyId) {
+        // Update existing payment
+        const index = selectedProperty.monthly.findIndex(p => p.id === window.editingMonthlyId);
+        if (index !== -1) {
+            selectedProperty.monthly[index] = payment;
+            showNotification('Payment updated successfully!');
+        }
+        window.editingMonthlyId = null;
+    } else {
+        // Add new payment to selected property
+        selectedProperty.monthly.push(payment);
+        showNotification('Payment recorded successfully!');
+    }
+    
+    saveData();
+    renderMonthly();
+    
+    if (window.editingMonthlyId === null && selectedProperty.monthly[selectedProperty.monthly.length - 1].id === payment.id) {
+        // This was a new payment addition, reset form
+        document.getElementById('monthlyForm').reset();
+        setDefaultDates();
+        
+        // Reset save button text
+        const monthlySaveBtn = document.querySelector('#monthlyForm button[type="submit"]');
+        monthlySaveBtn.textContent = 'Record Payment';
+        
+        // Hide cancel button
+        document.getElementById('monthlyCancelBtn').classList.add('hidden');
+    } else {
+        // This was an update, close overlay instead
+        document.getElementById('monthlyEditOverlay').classList.add('hidden');
+        document.body.style.overflow = '';
+        
+        // Reset edit form
+        document.getElementById('monthlyEditForm').reset();
+        
+        // 🔑 CRITICAL: Clean up tenant display and show dropdown again
+        const tenantDisplay = document.getElementById('monthlyTenantDisplay');
+        if (tenantDisplay) {
+            tenantDisplay.remove();
+        }
+        
+        const tenantSelect = document.getElementById('monthlyTenantEdit');
+        tenantSelect.style.display = 'block';
+        
+        // Reset form heading
+        document.getElementById('monthlyFormTitle').textContent = 'Record Monthly Payment';
+        
+        // Reset save button text
+        const monthlySaveBtn = document.querySelector('#monthlyEditForm button[type="submit"]');
+        monthlySaveBtn.textContent = 'Record Payment';
+        
+        // Hide cancel button
+        document.getElementById('monthlyCancelBtn').classList.add('hidden');
+        
+        showNotification('Payment updated successfully!');
+    }
+}
+
+// ===== EXPENSE FUNCTIONS =====
+function addExpense() {
+    // Validate that a property is selected
+    if (!data.selectedPropertyId) {
+        showNotification('Please select a property first!');
+        return;
+    }
+    
+    const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
+    if (!selectedProperty) {
+        showNotification('Selected property not found!');
+        return;
+    }
+    
+    // Ensure property expenses array exists
+    if (!selectedProperty.expenses) selectedProperty.expenses = [];
+    
+    // Determine which form to use based on edit mode
+    const isEditMode = window.editingExpenseId !== null;
+    const formPrefix = isEditMode ? 'Edit' : '';
+
+    const expense = {
+        id: window.editingExpenseId || Date.now(),
+        category: document.getElementById('expenseCategory' + formPrefix).value,
+        description: document.getElementById('expenseDescription' + formPrefix).value,
+        reference: document.getElementById('expenseReference' + formPrefix) ? document.getElementById('expenseReference' + formPrefix).value : '',
+        amount: document.getElementById('expenseAmount' + formPrefix).value,
+        date: document.getElementById('expenseDate' + formPrefix).value,
+        createdAt: new Date().toISOString()
+    };
+
+    // 🔑 CRITICAL: Check editing state BEFORE clearing it
+    const wasEditing = window.editingExpenseId !== null;
+
+    if (window.editingExpenseId) {
+        // Update existing expense
+        const index = selectedProperty.expenses.findIndex(e => e.id === window.editingExpenseId);
+        if (index !== -1) {
+            selectedProperty.expenses[index] = expense;
+            showNotification('Expense updated successfully!');
+        }
+        window.editingExpenseId = null;
+    } else {
+        // Add new expense to selected property
+        selectedProperty.expenses.push(expense);
+        showNotification('Expense added successfully!');
+    }
+    
+    saveData();
+    renderExpenses();
+    
+    if (wasEditing) {
+        // This was an update, close overlay instead
+        document.getElementById('expenseEditOverlay').classList.add('hidden');
+        document.body.style.overflow = '';
+        
+        // Reset edit form
+        document.getElementById('expenseEditForm').reset();
+        
+        // Reset form heading
+        document.getElementById('expenseFormTitle').textContent = 'Add Expense';
+        
+        // Reset save button text
+        const expenseSaveBtn = document.querySelector('#expenseEditForm button[type="submit"]');
+        expenseSaveBtn.textContent = 'Add Expense';
+        
+        // Hide cancel button
+        document.getElementById('expenseCancelBtn').classList.add('hidden');
+        
+        showNotification('Expense updated successfully!');
+    } else {
+        // This was a new expense addition, reset form
+        document.getElementById('expenseForm').reset();
+        setDefaultDates();
+        
+        // Reset save button text
+        const expenseSaveBtn = document.querySelector('#expenseForm button[type="submit"]');
+        expenseSaveBtn.textContent = 'Add Expense';
+        
+        // Hide cancel button
+        document.getElementById('expenseCancelBtn').classList.add('hidden');
+    }
+}
+
+// ===== MOVE OUT FUNCTIONS =====
+function addMoveOut() {
+    // Validate that a property is selected
+    if (!data.selectedPropertyId) {
+        showNotification('Please select a property first!');
+        return;
+    }
+    
+    const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
+    if (!selectedProperty) {
+        showNotification('Selected property not found!');
+        return;
+    }
+    
+    // Ensure property moveOuts array exists
+    if (!selectedProperty.moveOuts) selectedProperty.moveOuts = [];
+    
+    // Determine which form to use based on edit mode
+    const isEditMode = window.editingMoveOutId !== null;
+    const formPrefix = isEditMode ? 'Edit' : '';
+    
+    const moveOut = {
+        id: window.editingMoveOutId || Date.now(),
+        tenantId: document.getElementById('moveoutTenant' + formPrefix).value,
+        date: document.getElementById('moveoutDate' + formPrefix).value,
+        depositReturned: document.getElementById('depositReturned' + formPrefix).value,
+        notes: document.getElementById('moveoutNotes' + formPrefix).value,
+        createdAt: new Date().toISOString()
+    };
+
+    // 🔑 CRITICAL: Check editing state BEFORE clearing it
+    const wasEditing = window.editingMoveOutId !== null;
+
+    if (window.editingMoveOutId) {
+        // Update existing move out
+        const index = selectedProperty.moveOuts.findIndex(m => m.id === window.editingMoveOutId);
+        if (index !== -1) {
+            selectedProperty.moveOuts[index] = moveOut;
+            showNotification('Move out updated successfully!');
+        }
+        window.editingMoveOutId = null;
+    } else {
+        // Add new move out to selected property
+        selectedProperty.moveOuts.push(moveOut);
+        
+        // Mark tenant as moved out and free up the unit
+        const tenant = selectedProperty.tenants ? selectedProperty.tenants.find(t => t.id === moveOut.tenantId) : null;
+        if (tenant) {
+            console.log('Moving out tenant:', tenant.name, 'from unit:', tenant.unit);
+            tenant.movedOut = true;
+            tenant.moveOutDate = moveOut.date;
+            tenant.depositReturned = moveOut.depositReturned;
+            tenant.moveOutNotes = moveOut.notes;
+            // IMPORTANT: Preserve the unit field for historical records
+            // The unit will be available for new tenants because duplicate checking excludes movedOut tenants
+            console.log('Tenant moved out, unit preserved:', tenant.unit);
+        }
+        
+        showNotification('Move out recorded successfully!');
+    }
+    
+    saveData();
+    renderMoveOuts();
+    renderTenants(); // Re-render tenants to show moved out status
+    updateTenantSelects(); // Update tenant selects to exclude moved out tenants
+    
+    if (wasEditing) {
+        // This was an update, close overlay instead
+        document.getElementById('moveOutEditOverlay').classList.add('hidden');
+        document.body.style.overflow = '';
+        
+        // Reset edit form
+        document.getElementById('moveoutEditForm').reset();
+        
+        // Reset form heading
+        document.getElementById('moveOutFormTitle').textContent = 'Record Move Out';
+        
+        // Reset save button text
+        const moveoutSaveBtn = document.querySelector('#moveoutEditForm button[type="submit"]');
+        moveoutSaveBtn.textContent = 'Record Move Out';
+        
+        // Hide cancel button
+        document.getElementById('moveOutCancelBtn').classList.add('hidden');
+        
+        showNotification('Move out updated successfully!');
+    } else {
+        // This was a new move out addition, reset form
+        document.getElementById('moveoutForm').reset();
+        setDefaultDates();
+        
+        // Reset save button text
+        const moveoutSaveBtn = document.querySelector('#moveoutForm button[type="submit"]');
+        moveoutSaveBtn.textContent = 'Record Move Out';
+        
+        // Hide cancel button
+        document.getElementById('moveOutCancelBtn').classList.add('hidden');
+    }
+}
+
+// ===== RENDER FUNCTIONS =====
+function renderAllEntries() {
+    renderProperties();
+    renderTenants();
+    renderMonthly();
+    renderExpenses();
+}
+
+function renderTenants() {
+    const container = document.getElementById('tenantsList');
+    
+    if (!data.selectedPropertyId) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🏢</div>
+                <div class="empty-state-text">No property selected</div>
+                <div class="empty-state-subtext">Select a property to view tenants</div>
+            </div>
+        `;
+        return;
+    }
+    
+    const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
+    if (!selectedProperty) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🏢</div>
+                <div class="empty-state-text">Property not found</div>
+                <div class="empty-state-subtext">Select a valid property</div>
+            </div>
+        `;
+        return;
+    }
+    
+    const propertyTenants = selectedProperty.tenants || [];
+    
+    if (!propertyTenants || propertyTenants.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">👥</div>
+                <div class="empty-state-text">No tenants yet</div>
+                <div class="empty-state-subtext">Add your first tenant to get started</div>
+            </div>
+        `;
+        return;
+    }
+
+    // Sort tenants by numeric part of unit when possible, fallback to string
+    const sortedTenants = propertyTenants.slice().sort((a, b) => {
+        const aNum = parseInt((a.unit || '').match(/\d+/)?.[0] || '0');
+        const bNum = parseInt((b.unit || '').match(/\d+/)?.[0] || '0');
+        if (aNum !== bNum) return aNum - bNum;
+        return String(a.unit || '').localeCompare(String(b.unit || ''));
+    });
+
+    container.innerHTML = sortedTenants.map(tenant => `
+        <div class="entry-card ${tenant.movedOut ? 'moved-out-tenant' : ''}">
+            <div class="entry-header">
+                <div class="entry-title">${tenant.name}</div>
+                <div class="entry-amount">Ksh ${tenant.rent}</div>
+                ${tenant.movedOut ? `<div class="moved-out-stamp">Moved Out ${tenant.moveOutDate ? new Date(tenant.moveOutDate).toLocaleDateString() : ''}</div>` : ''}
+            </div>
+            <div class="entry-details">
+                <div>Unit: ${tenant.unit}</div>
+                <div>Phone: ${tenant.phone || 'Not provided'}</div>
+                <div>Email: ${tenant.email || 'Not provided'}</div>
+                <div>Tenant Since: ${tenant.since ? new Date(tenant.since).toLocaleDateString() : 'Not specified'}</div>
+                <div>Deposit: Ksh ${tenant.depositPaid || 0}</div>
+                <div>Electricity: ${tenant.electricityMeter || '—'} (Balance: Ksh ${tenant.electricityBalance || 0})</div>
+                <div>Water: ${tenant.waterMeter || '—'} (Balance: Ksh ${tenant.waterBalance || 0})</div>
+                ${tenant.notes ? `<div class="tenant-notes">${tenant.notes}</div>` : ''}
+                <div class="document-status">
+                    <span class="lease-status">
+                        📄 Lease: ${(tenant.leaseDocuments && tenant.leaseDocuments.length > 0) ? `${tenant.leaseDocuments.length} file(s)` : (tenant.leaseDocument ? 'Uploaded' : 'Not uploaded')}
+                    </span>
+                    <span class="id-status">
+                        🆔 ID: ${(tenant.idDocuments && tenant.idDocuments.length > 0) ? `${tenant.idDocuments.length} file(s)` : (tenant.idDocument ? 'Uploaded' : 'Not uploaded')}
+                    </span>
+                </div>
+            </div>
+            <div class="entry-actions">
+                <button class="btn btn-small btn-secondary" onclick="editTenant(${tenant.id})">Edit</button>
+                <button class="btn btn-small btn-danger" onclick="deleteTenant(${tenant.id})">Delete</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function renderMonthly() {
+    const container = document.getElementById('monthlyList');
+    
+    // Get monthly payments from selected property
+    let monthlyPayments = [];
+    if (data.selectedPropertyId) {
+        const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
+        if (selectedProperty && selectedProperty.monthly) {
+            monthlyPayments = selectedProperty.monthly;
+        }
+    }
+    
+    if (!monthlyPayments || monthlyPayments.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">💰</div>
+                <div class="empty-state-text">No payments recorded</div>
+                <div class="empty-state-subtext">Start tracking monthly payments</div>
+            </div>
+        `;
+        return;
+    }
+
+    // Get tenants from selected property for lookup
+    const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
+    const propertyTenants = selectedProperty ? (selectedProperty.tenants || []) : [];
+
+    container.innerHTML = monthlyPayments.map(payment => {
+        const tenant = propertyTenants.find(t => t.id == payment.tenantId);
+        return `
+            <div class="entry-card">
+                <div class="entry-header">
+                    <div class="entry-title">${tenant ? tenant.name : 'Unknown Tenant'}</div>
+                    <div class="entry-amount">Ksh ${payment.amount}</div>
+                </div>
+                <div class="entry-details">
+                    <div>Date: ${new Date(payment.date).toLocaleDateString()}</div>
+                    <div>${payment.notes || 'No notes'}</div>
+                </div>
+                <div class="entry-actions">
+                    <button class="btn btn-small btn-secondary" onclick="editMonthly(${payment.id})">Edit</button>
+                    <button class="btn btn-small btn-danger" onclick="deleteMonthly(${payment.id})">Delete</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderExpenses() {
+    console.log('🔍 renderExpenses called');
+    const container = document.getElementById('expensesList');
+    console.log('🔍 expensesList container found:', !!container);
+    
+    if (!data.selectedPropertyId) {
+        console.log('🔍 No selected property ID');
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🏢</div>
+                <div class="empty-state-text">No property selected</div>
+                <div class="empty-state-subtext">Select a property to manage expenses</div>
+            </div>
+        `;
+        return;
+    }
+    
+    const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
+    console.log('🔍 Selected property:', selectedProperty?.name);
+    console.log('🔍 Property expenses:', selectedProperty?.expenses?.length || 0);
+    
+    if (!selectedProperty || !selectedProperty.expenses || selectedProperty.expenses.length === 0) {
+        console.log('🔍 No expenses found - showing empty state');
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">📋</div>
+                <div class="empty-state-text">No expenses recorded</div>
+                <div class="empty-state-subtext">Track your property expenses</div>
+            </div>
+        `;
+        return;
+    }
+    
+    console.log('🔍 Rendering expenses list');
+    container.innerHTML = selectedProperty.expenses.map(expense => `
+        <div class="entry-card">
+            <div class="entry-header">
+                <div class="entry-title">${expense.description}</div>
+                <div class="entry-amount">Ksh ${expense.amount}</div>
+            </div>
+            <div class="entry-details">
+                <div>Category: ${expense.category}</div>
+                <div>Date: ${new Date(expense.date).toLocaleDateString()}</div>
+                ${expense.reference ? `<div>Reference: ${expense.reference}</div>` : ''}
+            </div>
+            <div class="entry-actions">
+                <button class="btn btn-small btn-secondary" onclick="editExpense(${expense.id})">Edit</button>
+                <button class="btn btn-small btn-danger" onclick="deleteExpense(${expense.id})">Delete</button>
+            </div>
+        </div>
+    `).join('');
+    
+    console.log('✅ renderExpenses completed');
+}
+
+function renderMoveOuts() {
+    const container = document.getElementById('moveoutsList');
+    
+    if (!data.selectedPropertyId) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🏢</div>
+                <div class="empty-state-text">No property selected</div>
+                <div class="empty-state-subtext">Go to Properties tab and select a property to manage</div>
+            </div>
+        `;
+        return;
+    }
+    
+    // Get move outs from selected property
+    let moveOuts = [];
+    let propertyTenants = [];
+    
+    if (data.selectedPropertyId) {
+        const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
+        if (selectedProperty) {
+            moveOuts = selectedProperty.moveOuts || [];
+            propertyTenants = selectedProperty.tenants || [];
+        }
+    }
+    
+    if (!moveOuts || moveOuts.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">🚚</div>
+                <div class="empty-state-text">No move outs recorded</div>
+                <div class="empty-state-subtext">Track tenant move outs for this property</div>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = moveOuts.map(moveOut => {
+        const tenant = propertyTenants.find(t => t.id === moveOut.tenantId);
+        return `
+            <div class="entry-card">
+                <div class="entry-header">
+                    <div class="entry-title">${tenant ? tenant.name : 'Unknown Tenant'}</div>
+                    <div class="entry-amount">Ksh ${moveOut.depositReturned || 0}</div>
+                </div>
+                <div class="entry-details">
+                    <div>Unit: ${tenant ? tenant.unit : 'Unknown'}</div>
+                    <div>Move Out Date: ${new Date(moveOut.date).toLocaleDateString()}</div>
+                    <div>${moveOut.notes || 'No notes'}</div>
+                </div>
+                <div class="entry-actions">
+                    <button class="btn btn-small btn-secondary" onclick="editMoveOut(${moveOut.id})">Edit</button>
+                    <button class="btn btn-small btn-danger" onclick="deleteMoveOut(${moveOut.id})">Delete</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Update tenant selects (including summary tenant select)
+function updateTenantSelects() {
+    const monthlySelect = document.getElementById('monthlyTenant');
+
+    // Get tenants from selected property using hierarchical structure
+    let propertyTenants = [];
+    if (data.selectedPropertyId) {
+        const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
+        if (selectedProperty && selectedProperty.tenants) {
+            propertyTenants = selectedProperty.tenants;
+        }
+    }
+
+    // Filter out moved out tenants for selects
+    const activeTenants = propertyTenants.filter(t => !t.movedOut);
+
+    const tenantsList = activeTenants.slice().sort((a, b) => {
+        const aNum = parseInt((a.unit || '').match(/\d+/)?.[0] || '0');
+        const bNum = parseInt((b.unit || '').match(/\d+/)?.[0] || '0');
+        if (aNum !== bNum) return aNum - bNum;
+        return String(a.unit || '').localeCompare(String(b.unit || ''));
+    });
+
+    const tenantOptions = tenantsList.map(tenant => `<option value="${tenant.id}">${tenant.name} - ${tenant.unit}</option>`).join('');
+    
+    // For monthly, only show active tenants
+    const options = '<option value="">Choose a tenant...</option>' + tenantOptions;
+    
+    if (monthlySelect) monthlySelect.innerHTML = options;
+}
+
+// ===== DELETE FUNCTIONS =====
+function deleteTenant(id) {
+    if (confirm('Are you sure you want to delete this tenant?')) {
+        // Delete tenant from hierarchical structure
+        for (const property of data.properties) {
+            if (property.tenants) {
+                const index = property.tenants.findIndex(t => t.id === id);
+                if (index !== -1) {
+                    property.tenants.splice(index, 1);
+                    break;
+                }
+            }
+        }
+        saveData();
+        renderTenants();
+        showToast('Tenant deleted', 'success');
+        updateTenantSelects();
+    }
+}
+
+function deleteMonthly(id) {
+    if (confirm('Are you sure you want to delete this payment?')) {
+        // Find and delete payment in hierarchical structure
+        let deleted = false;
+        for (const property of data.properties) {
+            if (property.monthly) {
+                const index = property.monthly.findIndex(m => m.id === id);
+                if (index !== -1) {
+                    property.monthly.splice(index, 1);
+                    deleted = true;
+                    break;
+                }
+            }
+        }
+        
+        if (deleted) {
+            saveData();
+            renderMonthly();
+            showToast('Payment deleted', 'success');
+        } else {
+            showNotification('Payment not found');
+        }
+    }
+}
+
+function deleteExpense(id) {
+    if (confirm('Are you sure you want to delete this expense?')) {
+        // Find and delete expense in hierarchical structure
+        let deleted = false;
+        for (const property of data.properties) {
+            if (property.expenses) {
+                const index = property.expenses.findIndex(e => e.id === id);
+                if (index !== -1) {
+                    property.expenses.splice(index, 1);
+                    deleted = true;
+                    break;
+                }
+            }
+        }
+        
+        if (deleted) {
+            saveData();
+            renderExpenses();
+            showToast('Expense deleted', 'success');
+        } else {
+            showNotification('Expense not found');
+        }
+    }
+}
+
+function deleteMoveOut(id) {
+    if (confirm('Are you sure you want to delete this move out record?')) {
+        // Find and delete move out in hierarchical structure
+        let deleted = false;
+        for (const property of data.properties) {
+            if (property.moveOuts) {
+                const index = property.moveOuts.findIndex(m => m.id === id);
+                if (index !== -1) {
+                    property.moveOuts.splice(index, 1);
+                    deleted = true;
+                    break;
+                }
+            }
+        }
+        
+        if (deleted) {
+            saveData();
+            renderMoveOuts();
+            showToast('Move out deleted', 'success');
+        } else {
+            showNotification('Move out record not found');
+        }
+    }
+}
+
+// ===== UTILITY FUNCTIONS =====
+function setDefaultDates() {
+    const today = new Date().toISOString().split('T')[0];
+    const monthlyDate = document.getElementById('monthlyDate');
+    const expenseDate = document.getElementById('expenseDate');
+    const moveoutDate = document.getElementById('moveoutDate');
+    const tenantSince = document.getElementById('tenantSince');
+    
+    if (monthlyDate) monthlyDate.value = today;
+    if (expenseDate) expenseDate.value = today;
+    if (moveoutDate) moveoutDate.value = today;
+    if (tenantSince) tenantSince.value = today;
+}
+
+function updateLastSaved() {
+    const now = new Date().toLocaleTimeString();
+    const lastSavedEl = document.getElementById('lastSaved');
+    if (lastSavedEl) {
+        lastSavedEl.textContent = 'Saved at ' + now;
+    }
+}
+
+function showSaveIndicator() {
+    const statusDot = document.getElementById('statusDot');
+    statusDot.style.background = '#10b981';
+    setTimeout(() => {
+        statusDot.style.background = '';
+    }, 1000);
+}
+
+// ===== PWA FUNCTIONS =====
+function initializePWA() {
+    let deferredPrompt;
+    
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        
+        // Show install prompt
+        const installPrompt = document.createElement('div');
+        installPrompt.className = 'install-prompt';
+        installPrompt.innerHTML = `
+            <h4>📱 Install Rental Manager</h4>
+            <p>Add this app to your home screen for quick access!</p>
+            <button class="btn btn-primary" onclick="installApp()">Install App</button>
+            <button class="btn btn-secondary" onclick="this.parentElement.remove()" style="margin-left: 8px;">Not Now</button>
+        `;
+        
+        document.querySelector('.content-area').prepend(installPrompt);
+    });
+    
+    window.installApp = async function() {
+        if (deferredPrompt) {
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            deferredPrompt = null;
+            
+            // Remove install prompt
+            const prompt = document.querySelector('.install-prompt');
+            if (prompt) prompt.remove();
+            
+            if (outcome === 'accepted') {
+                showNotification('App installed successfully!');
+            }
+        }
+    };
+}
+
+// ===== ONLINE/OFFLINE STATUS =====
+window.addEventListener('online', () => {
+    document.getElementById('statusDot').classList.remove('offline');
+    document.getElementById('statusText').textContent = 'Online';
+});
+
+window.addEventListener('offline', () => {
+    document.getElementById('statusDot').classList.add('offline');
+    document.getElementById('statusText').textContent = 'Offline';
+});
+
+// ===== SUMMARY FUNCTIONS =====
+function updateSummary() {
+    console.log('🔍 Rendering summary for selected property:', data.selectedPropertyId);
+    
+    // Check if Summary tab is visible
+    const summaryTab = document.getElementById('summary');
+    if (summaryTab) {
+        console.log('🔍 Summary tab found:', summaryTab);
+        console.log('🔍 Summary tab classes:', summaryTab.className);
+        console.log('🔍 Summary tab display:', window.getComputedStyle(summaryTab).display);
+        console.log('🔍 Summary tab visibility:', window.getComputedStyle(summaryTab).visibility);
+        
+        // Force show the summary tab
+        summaryTab.style.display = 'block !important';
+        summaryTab.style.visibility = 'visible !important';
+        summaryTab.classList.add('active');
+    } else {
+        console.log('❌ Summary tab not found');
+        return;
+    }
+    
+    // Check if summary elements exist and force visibility
+    const summaryCards = document.getElementById('summaryCards');
+    const incomeEl = document.querySelector('.summary-amount.income');
+    const expenseEl = document.querySelector('.summary-amount.expense');
+    const netEl = document.querySelector('.summary-amount.net');
+    
+    console.log('🔍 Summary elements found:', {
+        summaryCards: !!summaryCards,
+        incomeEl: !!incomeEl,
+        expenseEl: !!expenseEl,
+        netEl: !!netEl
+    });
+    
+    if (!summaryCards || !incomeEl || !expenseEl || !netEl) {
+        console.log('❌ CRITICAL: Summary DOM elements missing!');
+        return;
+    }
+    
+    // Force visibility of summary cards container
+    summaryCards.style.display = 'grid !important';
+    summaryCards.style.visibility = 'visible !important';
+    console.log('✅ Forced summary cards visibility');
+    
+    // Calculate totals for SELECTED PROPERTY ONLY (like other tabs)
+    let totalIncome = 0;
+    let totalExpenses = 0;
+    let selectedProperty = null;
+    
+    // Find the selected property (same pattern as other tabs)
+    if (data.selectedPropertyId && data.properties) {
+        selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
+        console.log('🏠 Found selected property:', selectedProperty?.name);
+    }
+    
+    if (!selectedProperty) {
+        console.log('🔍 No selected property - showing empty state');
+        // Show empty state instead of returning
+        incomeEl.textContent = 'Ksh 0';
+        expenseEl.textContent = 'Ksh 0';
+        netEl.textContent = 'Ksh 0';
+        
+        // Update summary table to show no property selected
+        const summaryTable = document.getElementById('summaryTable');
+        if (summaryTable) {
+            summaryTable.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🏢</div>
+                    <div class="empty-state-text">No property selected</div>
+                    <div class="empty-state-subtext">Select a property to see reports</div>
+                </div>
+            `;
+        }
+        return;
+    }
+    
+    // Calculate totals for the selected property only
+    console.log('🏠 Processing selected property:', selectedProperty.name);
+    
+    // Sum monthly income for selected property
+    if (selectedProperty.monthly && selectedProperty.monthly.length > 0) {
+        selectedProperty.monthly.forEach(record => {
+            const amount = parseFloat(record.amount) || 0;
+            totalIncome += amount;
+            console.log('💰 Adding income:', amount, 'Total now:', totalIncome);
+        });
+    }
+    
+    // Sum expenses for selected property
+    if (selectedProperty.expenses && selectedProperty.expenses.length > 0) {
+        selectedProperty.expenses.forEach(record => {
+            const amount = parseFloat(record.amount) || 0;
+            totalExpenses += amount;
+            console.log('💳 Adding expense:', amount, 'Total now:', totalExpenses);
+        });
+    }
+    
+    const netIncome = totalIncome - totalExpenses;
+    
+    console.log('📊 FINAL TOTALS for', selectedProperty.name + ':', {
+        totalIncome,
+        totalExpenses,
+        netIncome
+    });
+    
+    // Update summary cards with forced visibility
+    incomeEl.textContent = `Ksh ${totalIncome.toLocaleString()}`;
+    incomeEl.style.display = 'block !important';
+    incomeEl.style.visibility = 'visible !important';
+    incomeEl.parentElement.style.display = 'block !important';
+    incomeEl.parentElement.style.visibility = 'visible !important';
+    console.log('✅ Updated income element:', incomeEl.textContent);
+    
+    expenseEl.textContent = `Ksh ${totalExpenses.toLocaleString()}`;
+    expenseEl.style.display = 'block !important';
+    expenseEl.style.visibility = 'visible !important';
+    expenseEl.parentElement.style.display = 'block !important';
+    expenseEl.parentElement.style.visibility = 'visible !important';
+    console.log('✅ Updated expense element:', expenseEl.textContent);
+    
+    netEl.textContent = `Ksh ${netIncome.toLocaleString()}`;
+    netEl.style.display = 'block !important';
+    netEl.style.visibility = 'visible !important';
+    netEl.parentElement.style.display = 'block !important';
+    netEl.parentElement.style.visibility = 'visible !important';
+    console.log('✅ Updated net element:', netEl.textContent);
+    
+    // Update summary table for selected property
+    const summaryTable = document.getElementById('summaryTable');
+    if (summaryTable) {
+        let tableHTML = '<table class="summary-table"><thead><tr><th>Property</th><th>Income</th><th>Expenses</th><th>Net</th></tr></thead><tbody>';
+        
+        tableHTML += `
+            <tr>
+                <td>${selectedProperty.name}</td>
+                <td>Ksh ${totalIncome.toLocaleString()}</td>
+                <td>Ksh ${totalExpenses.toLocaleString()}</td>
+                <td>Ksh ${netIncome.toLocaleString()}</td>
+            </tr>
+        `;
+        
+        tableHTML += '</tbody></table>';
+        summaryTable.innerHTML = tableHTML;
+        console.log('✅ Updated summary table for selected property');
+    }
+    
+    console.log('🎯 updateSummary completed successfully for selected property');
+}
+
+// Helper: build tenant summary text (exclude payment type/notes)
+function buildTenantSummaryText(tenantId) {
+    // Find the tenant across all properties
+    let selectedTenant = null;
+    let tenantProperty = null;
+    
+    for (const property of data.properties) {
+        if (property.tenants) {
+            const tenant = property.tenants.find(t => t.id == tenantId);
+            if (tenant) {
+                selectedTenant = tenant;
+                tenantProperty = property;
+                break;
+            }
+        }
+    }
+    
+    if (!selectedTenant) return 'Tenant not found';
+    
+    const payments = (tenantProperty.monthly || []).filter(p => String(p.tenantId) === String(selectedTenant.id));
+    const totalPaid = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+    const paymentsCount = payments.length;
+    const lastPaymentDate = payments.length ? payments.map(p => p.date).sort().reverse()[0] : null;
+    const moveOut = (tenantProperty.moveOuts || []).find(m => String(m.tenantId) === String(selectedTenant.id));
+    const depositReturned = moveOut ? (moveOut.depositReturned || 0) : null;
+
+    const lines = [];
+    lines.push(`${tenant.name}${tenant.unit ? ' — ' + tenant.unit : ''}`);
+    lines.push(`Rent: Ksh ${tenant.rent || '0'}`);
+    lines.push(`Total Paid: Ksh ${totalPaid.toFixed(2)}`);
+    lines.push(`Payments Count: ${paymentsCount}`);
+    lines.push(`Last Payment: ${lastPaymentDate ? new Date(lastPaymentDate).toLocaleDateString() : 'N/A'}`);
+    if (depositReturned !== null) lines.push(`Deposit Returned: Ksh ${depositReturned}`);
+    lines.push('Generated by Rental Manager');
+
+    return lines.join('\n');
+}
+
+// ===== BACKUP FUNCTIONS =====
+function updateBackupInfo() {
+    const dataSize = JSON.stringify(data).length;
+    const dataSizeKB = (dataSize / 1024).toFixed(2);
+    const lastSaved = localStorage.getItem('lastSaved') || 'Never';
+    const syncStatusText = isOnline ? 'Synced to cloud' : 'Syncing locally';
+    
+    document.getElementById('lastBackup').textContent = lastSaved;
+    document.getElementById('dataSize').textContent = `${dataSizeKB} KB`;
+    const syncElement = document.getElementById('cloudSyncStatus');
+    if (syncElement) {
+        syncElement.textContent = syncStatusText;
+    }
+}
+
+function exportData() {
+    const dataStr = JSON.stringify(data, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `inzu-backup-${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showNotification('Data exported successfully!');
+}
+
+function exportCSV() {
+    let csv = 'Type,Name/Description,Amount,Date,Notes\n';
+    
+    // Export tenants from all properties
+    data.properties.forEach(property => {
+        if (property.tenants) {
+            property.tenants.forEach(tenant => {
+                csv += `Tenant,"${tenant.name}",${tenant.rent},${tenant.createdAt},"Unit: ${tenant.unit}"\n`;
+            });
+        }
+    });
+    
+    // Export monthly payments
+    data.properties.forEach(property => {
+        if (property.monthly) {
+            property.monthly.forEach(payment => {
+                // Find tenant in this property
+                const tenant = property.tenants?.find(t => t.id == payment.tenantId);
+                csv += `Payment,"${tenant ? tenant.name : 'Unknown'}",${payment.amount},${payment.date},"${payment.notes || ''}"\n`;
+            });
+        }
+    });
+    
+    // Export move outs
+    data.properties.forEach(property => {
+        if (property.moveOuts) {
+            property.moveOuts.forEach(moveOut => {
+                // Find tenant in this property
+                const tenant = property.tenants?.find(t => t.id == moveOut.tenantId);
+                csv += `Move Out,"${tenant ? tenant.name : 'Unknown'}",${moveOut.depositReturned || 0},${moveOut.date},"${moveOut.notes || ''}"\n`;
+            });
+        }
+    });
+    
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `inzu-${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showNotification('CSV exported successfully!');
+}
+
+function importData() {
+    const fileInput = document.getElementById('importFile');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        showNotification('Please select a file to import');
+        return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const importedData = JSON.parse(e.target.result);
+            
+            // Convert flat structure to hierarchical structure
+            const hierarchicalData = {
+                properties: [],
+                selectedPropertyId: null
+            };
+            
+            // Create a default property if none exists
+            if (!importedData.properties || importedData.properties.length === 0) {
+                hierarchicalData.properties.push({
+                    id: Date.now(),
+                    name: 'Imported Property',
+                    address: 'Imported Address',
+                    type: 'apartment',
+                    units: 50,
+                    description: 'Property created during import',
+                    tenants: [],
+                    monthly: [],
+                    expenses: [],
+                    moveOuts: [],
+                    queries: [],
+                    createdAt: new Date().toISOString()
+                });
+            }
+            
+            // Migrate flat data to hierarchical structure
+            if (importedData.tenants && importedData.tenants.length > 0) {
+                importedData.tenants.forEach(tenant => {
+                    const targetProperty = hierarchicalData.properties[0]; // Use first property
+                    if (targetProperty) {
+                        targetProperty.tenants = targetProperty.tenants || [];
+                        targetProperty.tenants.push(tenant);
+                    }
+                });
+            }
+            
+            if (importedData.monthly && importedData.monthly.length > 0) {
+                importedData.monthly.forEach(payment => {
+                    const targetProperty = hierarchicalData.properties[0]; // Use first property
+                    if (targetProperty) {
+                        targetProperty.monthly = targetProperty.monthly || [];
+                        targetProperty.monthly.push(payment);
+                    }
+                });
+            }
+            
+            if (importedData.expenses && importedData.expenses.length > 0) {
+                importedData.expenses.forEach(expense => {
+                    const targetProperty = hierarchicalData.properties[0]; // Use first property
+                    if (targetProperty) {
+                        targetProperty.expenses = targetProperty.expenses || [];
+                        targetProperty.expenses.push(expense);
+                    }
+                });
+            }
+            
+            if (importedData.moveOuts && importedData.moveOuts.length > 0) {
+                importedData.moveOuts.forEach(moveOut => {
+                    const targetProperty = hierarchicalData.properties[0]; // Use first property
+                    if (targetProperty) {
+                        targetProperty.moveOuts = targetProperty.moveOuts || [];
+                        targetProperty.moveOuts.push(moveOut);
+                    }
+                });
+            }
+            
+            // Confirm import
+            if (confirm('This will replace all current data. Are you sure?')) {
+                data = hierarchicalData;
+                saveData();
+                renderAllEntries();
+                updateTenantSelects();
+                showNotification('Data imported successfully! ' + validData.tenants.length + ' tenants, ' + validData.monthly.length + ' payments loaded.');
+                fileInput.value = ''; // Clear file input
+            }
+        } catch (error) {
+            console.error('Import error:', error);
+            showNotification('Error: ' + error.message + '. Make sure you exported this from the Rental Manager app.');
+        }
+    };
+    
+    reader.readAsText(file);
+}
+
+function clearAllData() {
+    if (confirm('⚠️ WARNING: This will delete ALL data permanently. Are you sure?')) {
+        if (confirm('Last chance! Export a backup first if needed. Delete everything?')) {
+            data = {
+                tenants: [],
+                monthly: [],
+                expenses: [],
+                moveOuts: []
+            };
+            saveData();
+            renderAllEntries();
+            updateTenantSelects();
+            showNotification('All data cleared');
+        }
+    }
+}
+
+// ===== EDIT FUNCTIONS =====
+function captureTenantFormState() {
+    const form = document.getElementById('tenantForm');
+    tenantFormInitialState = JSON.stringify(
+        Array.from(new FormData(form))
+    );
+    console.log('🔍 Captured initial form state:', tenantFormInitialState);
+}
+
+function updateTenantFormButtons() {
+    const cancelBtn = document.getElementById('tenantCancelBtn');
+    const saveBtn = document.querySelector('#tenantForm button[type="submit"]');
+    
+    // Cancel button is always enabled
+    if (cancelBtn) {
+        cancelBtn.disabled = false;
+        cancelBtn.style.opacity = '1';
+        cancelBtn.style.cursor = 'pointer';
+    }
+    
+    // Update button only enabled when there are changes (both add and edit modes)
+    if (saveBtn) {
+        saveBtn.disabled = !hasTenantFormChanged;
+        saveBtn.style.opacity = hasTenantFormChanged ? '1' : '0.5';
+        saveBtn.style.cursor = hasTenantFormChanged ? 'pointer' : 'not-allowed';
+    }
+}
+
+function captureMonthlyFormState() {
+    // Use edit form if we're in edit mode, otherwise use regular form
+    const form = document.getElementById('monthlyEditForm') || document.getElementById('monthlyForm');
+    monthlyFormInitialState = JSON.stringify(
+        Array.from(new FormData(form))
+    );
+}
+
+function updateMonthlyFormButtons() {
+    const cancelBtn = document.getElementById('monthlyCancelBtn');
+    // Use edit form if it exists, otherwise use regular form
+    const saveBtn = document.querySelector('#monthlyEditForm button[type="submit"]') || document.querySelector('#monthlyForm button[type="submit"]');
+    
+    // Cancel button is always enabled
+    if (cancelBtn) {
+        cancelBtn.disabled = false;
+        cancelBtn.style.opacity = '1';
+        cancelBtn.style.cursor = 'pointer';
+    }
+    
+    // Update button only enabled when there are changes
+    if (saveBtn) {
+        saveBtn.disabled = !hasMonthlyFormChanged;
+        saveBtn.style.opacity = hasMonthlyFormChanged ? '1' : '0.5';
+        saveBtn.style.cursor = hasMonthlyFormChanged ? 'pointer' : 'not-allowed';
+    }
+}
+
+function captureExpenseFormState() {
+    const form = document.getElementById('expenseForm');
+    expenseFormInitialState = JSON.stringify(
+        Array.from(new FormData(form))
+    );
+}
+
+function updateExpenseFormButtons() {
+    const cancelBtn = document.getElementById('expenseCancelBtn');
+    const saveBtn = document.querySelector('#expenseForm button[type="submit"]');
+    
+    // Cancel button is always enabled
+    if (cancelBtn) {
+        cancelBtn.disabled = false;
+        cancelBtn.style.opacity = '1';
+        cancelBtn.style.cursor = 'pointer';
+    }
+    
+    // Update button only enabled when there are changes
+    if (saveBtn) {
+        saveBtn.disabled = !hasExpenseFormChanged;
+        saveBtn.style.opacity = hasExpenseFormChanged ? '1' : '0.5';
+        saveBtn.style.cursor = hasExpenseFormChanged ? 'pointer' : 'not-allowed';
+    }
+}
+
+function captureMoveOutFormState() {
+    const form = document.getElementById('moveoutForm');
+    moveOutFormInitialState = JSON.stringify(
+        Array.from(new FormData(form))
+    );
+}
+
+function updateMoveOutFormButtons() {
+    const cancelBtn = document.getElementById('moveOutCancelBtn');
+    const saveBtn = document.querySelector('#moveoutForm button[type="submit"]');
+    
+    // Cancel button is always enabled
+    if (cancelBtn) {
+        cancelBtn.disabled = false;
+        cancelBtn.style.opacity = '1';
+        cancelBtn.style.cursor = 'pointer';
+    }
+    
+    // Update button only enabled when there are changes
+    if (saveBtn) {
+        saveBtn.disabled = !hasMoveOutFormChanged;
+        saveBtn.style.opacity = hasMoveOutFormChanged ? '1' : '0.5';
+        saveBtn.style.cursor = hasMoveOutFormChanged ? 'pointer' : 'not-allowed';
+    }
+}
+
+function editTenant(id) {
+    console.log('🔄 editTenant() called with id:', id);
+    
+    // Use safe helper to find tenant
+    const result = findTenantInAllProperties(id);
+    if (!result) {
+        console.error('❌ Tenant not found:', id);
+        showNotification('Tenant not found');
+        return;
+    }
+    
+    const { tenant, property } = result;
+    console.log('✅ Found tenant:', tenant.name, 'in property:', property.name);
+    
+    // Store the original tenant data for validation and change detection
+    window.editingTenantId = id;
+    window.originalTenantData = {
+        name: tenant.name,
+        unit: tenant.unit,
+        rent: tenant.rent,
+        phone: tenant.phone || '',
+        email: tenant.email || '',
+        since: tenant.since || '',
+        depositPaid: tenant.depositPaid || '',
+        notes: tenant.notes || '',
+        electricityMeter: tenant.electricityMeter || '',
+        electricityBalance: tenant.electricityBalance || 0,
+        waterMeter: tenant.waterMeter || '',
+        waterBalance: tenant.waterBalance || 0,
+        leaseDocuments: tenant.leaseDocuments || [],
+        idDocuments: tenant.idDocuments || [],
+        leaseDocument: tenant.leaseDocument || null,
+        idDocument: tenant.idDocument || null
+    };
+    
+    // Show overlay and lock background scroll
+    document.getElementById('tenantEditOverlay').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    
+    // Fill form with tenant data
+    document.getElementById('tenantName').value = tenant.name;
+    document.getElementById('tenantUnit').value = tenant.unit;
+    document.getElementById('tenantRent').value = tenant.rent;
+    document.getElementById('tenantPhone').value = tenant.phone || '';
+    document.getElementById('tenantEmail').value = tenant.email || '';
+    document.getElementById('tenantSince').value = tenant.since || '';
+    document.getElementById('depositPaid').value = tenant.depositPaid || '';
+    document.getElementById('tenantNotes').value = tenant.notes || '';
+    document.getElementById('electricityMeter').value = tenant.electricityMeter || '';
+    document.getElementById('electricityBalance').value = tenant.electricityBalance || '';
+    document.getElementById('waterMeter').value = tenant.waterMeter || '';
+    document.getElementById('waterBalance').value = tenant.waterBalance || '';
+    
+    // CRITICAL: Capture baseline immediately after form population
+    hasTenantFormChanged = false;
+    captureTenantFormState();
+    updateTenantFormButtons();
+    
+    // Display existing documents
+    const leaseDisplay = document.getElementById('leaseDocumentDisplay');
+    const idDisplay = document.getElementById('tenantIdDocumentDisplay');
+    
+    // Show lease document if exists
+    if (tenant.leaseDocuments && tenant.leaseDocuments.length > 0) {
+        // Show individual lease files with X buttons
+        let leaseFilesHtml = '<div>';
+        tenant.leaseDocuments.forEach((doc, index) => {
+            leaseFilesHtml += `
+                <div>
+                    <span>${doc.name}</span>
+                    <button type="button" onclick="removeLeaseDocument(${index})">×</button>
+                </div>
+            `;
+        });
+        leaseFilesHtml += '</div>';
+        leaseDisplay.innerHTML = leaseFilesHtml;
+        
+        // Create Upload button with correct state based on count
+        let leaseBtnState = '';
+        let leaseBtnText = 'Upload';
+        if (tenant.leaseDocuments.length >= 3) {
+            leaseBtnState = 'disabled style="opacity: 0.5; cursor: not-allowed;"';
+            leaseBtnText = 'Max 3 files';
+        }
+        document.getElementById('leaseDocumentButtons').innerHTML = `<button type="button" id="leaseUploadBtn" class="btn btn-secondary" onclick="document.getElementById('leaseDocument').click()" ${leaseBtnState}>${leaseBtnText}</button>`;
+    } else if (tenant.leaseDocument) {
+        // Show single file with X button (backward compatibility)
+        leaseDisplay.innerHTML = `
+            <div>
+                <span>${tenant.leaseDocument.name}</span>
+                <button type="button" onclick="removeLeaseDocument(0)">×</button>
+            </div>
+        `;
+        
+        // Show Upload button (enabled for single file)
+        document.getElementById('leaseDocumentButtons').innerHTML = '<button type="button" id="leaseUploadBtn" class="btn btn-secondary" onclick="document.getElementById(\'leaseDocument\').click()">Upload</button>';
+    } else {
+        leaseDisplay.innerHTML = '<span>No documents uploaded</span>';
+        document.getElementById('leaseDocumentButtons').innerHTML = '<button type="button" id="leaseUploadBtn" class="btn btn-secondary" onclick="document.getElementById(\'leaseDocument\').click()">Upload</button>';
+    }
+    
+    // Show ID documents if exist (handle both old single and new multiple format)
+    const idButtonsContainer = document.getElementById('idDocumentButtons');
+    if (tenant.idDocuments && tenant.idDocuments.length > 0) {
+        // Show individual files with X buttons
+        let filesHtml = '<div>';
+        tenant.idDocuments.forEach((doc, index) => {
+            filesHtml += `
+                <div>
+                    <span>${doc.name}</span>
+                    <button type="button" onclick="removeIdDocument(${index})">×</button>
+                </div>
+            `;
+        });
+        filesHtml += '</div>';
+        idDisplay.innerHTML = filesHtml;
+        
+        // Create Upload button with correct state based on count
+        let idBtnState = '';
+        let idBtnText = 'Upload';
+        if (tenant.idDocuments.length >= 3) {
+            idBtnState = 'disabled style="opacity: 0.5; cursor: not-allowed;"';
+            idBtnText = 'Max 3 files';
+        }
+        idButtonsContainer.innerHTML = `<button type="button" id="idUploadBtn" class="btn btn-secondary" onclick="document.getElementById('tenantIdDocument').click()" ${idBtnState}>${idBtnText}</button>`;
+        window.idDocumentMode = 'add'; // Always add mode when documents exist
+    } else if (tenant.idDocument) {
+        // Show single file with X button
+        idDisplay.innerHTML = `
+            <div>
+                <span>${tenant.idDocument.name}</span>
+                <button type="button" onclick="removeSingleIdDocument()">×</button>
+            </div>
+        `;
+        
+        // Show Upload button (enabled for single file)
+        idButtonsContainer.innerHTML = '<button type="button" id="idUploadBtn" class="btn btn-secondary" onclick="document.getElementById(\'tenantIdDocument\').click()">Upload</button>';
+        window.idDocumentMode = 'add'; // Always add mode when documents exist
+    } else {
+        idDisplay.innerHTML = '<span>No documents uploaded</span>';
+        idButtonsContainer.innerHTML = '<button type="button" id="idUploadBtn" class="btn btn-secondary" onclick="document.getElementById(\'tenantIdDocument\').click()">Upload</button>';
+        window.idDocumentMode = 'new'; // New upload mode
+    }
+    
+    // Change save button text
+    const saveBtn = document.querySelector('#tenantForm button[type="submit"]');
+    saveBtn.textContent = 'Update Tenant';
+    
+    // Change form heading
+    document.getElementById('tenantFormTitle').textContent = 'Edit Tenant';
+    
+    // Show cancel button
+    document.getElementById('tenantCancelBtn').classList.remove('hidden');
+    
+    // 🔑 CRITICAL: Add file input event listeners for change detection
+    const leaseFileInput = document.getElementById('leaseDocument');
+    const idFileInput = document.getElementById('tenantIdDocument');
+    
+    if (leaseFileInput) {
+        // Remove existing listeners to prevent duplicates
+        leaseFileInput.replaceWith(leaseFileInput.cloneNode(true));
+        const newLeaseInput = document.getElementById('leaseDocument');
+        newLeaseInput.addEventListener('change', () => {
+            console.log('🔍 Lease file input changed, files length:', newLeaseInput.files.length);
+            hasTenantFormChanged = true;
+            console.log('🔍 File upload change detected:', hasTenantFormChanged);
+            
+            // Display uploaded files immediately
+            displayUploadedFiles('leaseDocumentDisplay', newLeaseInput.files);
+            
+            updateTenantFormButtons();
+        });
+    }
+    
+    if (idFileInput) {
+        // Remove existing listeners to prevent duplicates
+        idFileInput.replaceWith(idFileInput.cloneNode(true));
+        const newIdInput = document.getElementById('tenantIdDocument');
+        newIdInput.addEventListener('change', () => {
+            console.log('🔍 ID file input changed, files length:', newIdInput.files.length);
+            hasTenantFormChanged = true;
+            console.log('🔍 File upload change detected:', hasTenantFormChanged);
+            
+            // Display uploaded files immediately
+            displayUploadedFiles('tenantIdDocumentDisplay', newIdInput.files);
+            
+            updateTenantFormButtons();
+        });
+    }
+    
+    showNotification('Edit tenant details and save to update');
+}
+
+// Display uploaded files immediately
+function displayUploadedFiles(displayElementId, files) {
+    const displayElement = document.getElementById(displayElementId);
+    if (!displayElement) return;
+    
+    if (files && files.length > 0) {
+        let filesHtml = '<div>';
+        for (let i = 0; i < files.length; i++) {
+            filesHtml += `
+                <div>
+                    <span>${files[i].name}</span>
+                    <button type="button" onclick="removeNewFile(${i})">×</button>
+                </div>
+            `;
+        }
+        filesHtml += '</div>';
+        displayElement.innerHTML = filesHtml;
+    } else {
+        displayElement.innerHTML = '<span>No documents uploaded</span>';
+    }
+}
+
+// Display existing tenant documents
+function displayIdDocuments(tenant) {
+    const idDisplay = document.getElementById('tenantIdDocumentDisplay');
+    if (!idDisplay || !tenant) return;
+    
+    if (tenant.idDocuments && tenant.idDocuments.length > 0) {
+        let filesHtml = '<div>';
+        tenant.idDocuments.forEach((doc, index) => {
+            filesHtml += `
+                <div>
+                    <span>${doc.name}</span>
+                    <button type="button" onclick="removeIdDocument(${index})">×</button>
+                </div>
+            `;
+        });
+        filesHtml += '</div>';
+        idDisplay.innerHTML = filesHtml;
+    } else if (tenant.idDocument) {
+        // Backward compatibility for single file
+        idDisplay.innerHTML = `
+            <div>
+                <span>${tenant.idDocument.name}</span>
+                <button type="button" onclick="removeSingleIdDocument()">×</button>
+            </div>
+        `;
+    } else {
+        idDisplay.innerHTML = '<span>No documents uploaded</span>';
+    }
+}
+
+// Function to cancel tenant edit
+function cancelTenantEdit() {
+    if (window.editingTenantId) {
+        // Check if there are unsaved changes
+        const hasChanges = !document.querySelector('#tenantForm button[type="submit"]').disabled;
+        
+        if (hasChanges) {
+            if (!confirm('You have unsaved changes. Are you sure you want to cancel?')) {
+                return;
+            }
+        }
+        
+        // Reset editing state
+        window.editingTenantId = null;
+        window.originalTenantData = null;
+    }
+    
+    // Reset form
+    document.getElementById('tenantForm').reset();
+    
+    // Reset form heading
+    document.getElementById('tenantFormTitle').textContent = 'Add New Tenant';
+    
+    // Reset save button text and state
+    const saveBtn = document.querySelector('#tenantForm button[type="submit"]');
+    saveBtn.textContent = 'Save Tenant';
+    saveBtn.disabled = false;
+    saveBtn.style.opacity = '1';
+    saveBtn.style.cursor = 'pointer';
+    
+    // Hide cancel button
+    document.getElementById('tenantCancelBtn').classList.add('hidden');
+    
+    // Reset document displays
+    document.getElementById('leaseDocumentDisplay').innerHTML = '';
+    document.getElementById('tenantIdDocumentDisplay').innerHTML = '';
+    
+    // Reset button states
+    document.getElementById('leaseUploadBtn').textContent = 'Upload';
+    
+    // Reset ID document buttons
+    document.getElementById('idDocumentButtons').innerHTML = '<button type="button" id="idUploadBtn" class="btn btn-secondary" onclick="document.getElementById(\'tenantIdDocument\').click()">Upload</button>';
+    
+    // Reset lease document buttons
+    document.getElementById('leaseDocumentButtons').innerHTML = '<button type="button" id="leaseUploadBtn" class="btn btn-secondary" onclick="document.getElementById(\'leaseDocument\').click()">Upload</button>';
+    
+    // Clear accumulated files
+    window.existingLeaseFiles = [];
+    window.existingIdFiles = [];
+    
+    window.idDocumentMode = 'new';
+    
+    // Hide overlay and restore background scroll
+    document.getElementById('tenantEditOverlay').classList.add('hidden');
+    document.body.style.overflow = '';
+    
+    showNotification('Edit cancelled');
+}
+
+function editMonthly(id) {
+    console.log('🔄 editMonthly() called with id:', id);
+    
+    // Use safe helper to find payment in hierarchical structure
+    let payment = null;
+    let paymentProperty = null;
+    
+    for (const property of data.properties) {
+        if (property.monthly) {
+            const found = property.monthly.find(p => p.id === id);
+            if (found) {
+                payment = found;
+                paymentProperty = property;
+                break;
+            }
+        }
+    }
+    
+    if (!payment) {
+        console.error('❌ Payment not found:', id);
+        showNotification('Payment not found');
+        return;
+    }
+    
+    console.log('✅ Found payment:', payment.amount, 'in property:', paymentProperty.name);
+    console.log('🔍 About to show monthlyEditOverlay');
+    
+    // Show overlay and lock background scroll
+    const overlay = document.getElementById('monthlyEditOverlay');
+    if (overlay) {
+        overlay.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        console.log('✅ Overlay shown successfully');
+    } else {
+        console.error('❌ monthlyEditOverlay not found!');
+        return;
+    }
+    
+    // Fill form with payment data
+    document.getElementById('monthlyTenantEdit').value = payment.tenantId;
+    document.getElementById('monthlyAmountEdit').value = payment.amount;
+    document.getElementById('monthlyDateEdit').value = payment.date;
+    document.getElementById('monthlyNotesEdit').value = payment.notes || '';
+    
+    // 🔑 CRITICAL: Hide tenant dropdown in edit mode and show tenant name
+    const tenantSelect = document.getElementById('monthlyTenantEdit');
+    console.log('🔍 Looking for tenant with ID:', payment.tenantId);
+    console.log('🔍 Available tenants in property:', paymentProperty.tenants);
+    
+    const tenant = paymentProperty.tenants?.find(t => t.id == payment.tenantId); // Use == instead of ===
+    console.log('🔍 Found tenant:', tenant);
+    
+    if (tenant) {
+        console.log('✅ Creating tenant display for:', tenant.name);
+        
+        // Hide the dropdown completely
+        tenantSelect.style.display = 'none';
+        
+        // Hide the "Select Tenant" label
+        const tenantLabel = document.querySelector('label[for="monthlyTenantEdit"]');
+        if (tenantLabel) {
+            tenantLabel.style.display = 'none';
+        }
+        
+        // Show tenant name in place of the dropdown
+        const tenantDisplay = document.createElement('div');
+        tenantDisplay.id = 'monthlyTenantDisplay';
+        tenantDisplay.style.marginBottom = '15px';
+        tenantDisplay.style.padding = '12px';
+        tenantDisplay.style.backgroundColor = '#e8f4fd';
+        tenantDisplay.style.border = '1px solid #2196F3';
+        tenantDisplay.style.borderRadius = '6px';
+        tenantDisplay.innerHTML = `
+            <div style="font-size: 14px; color: #666; margin-bottom: 4px;">Editing Payment For:</div>
+            <div style="font-size: 16px; font-weight: bold; color: #1976D2;">${tenant.name}</div>
+            <div style="font-size: 12px; color: #888; margin-top: 4px;">Unit: ${tenant.unit || 'N/A'}</div>
+        `;
+        
+        // Insert the display before the dropdown
+        tenantSelect.parentNode.insertBefore(tenantDisplay, tenantSelect);
+        console.log('✅ Tenant display created and inserted');
+    } else {
+        console.error('❌ Tenant not found for payment.tenantId:', payment.tenantId);
+    }
+    
+    // Reset edit state and capture baseline
+    hasMonthlyFormChanged = false;
+    captureMonthlyFormState();
+    updateMonthlyFormButtons();
+    
+    // Change save button text
+    const saveBtn = document.querySelector('#monthlyEditForm button[type="submit"]');
+    saveBtn.textContent = 'Update Payment';
+    
+    // Change form heading
+    document.getElementById('monthlyFormTitle').textContent = 'Edit Monthly Payment';
+    
+    // Show cancel button
+    document.getElementById('monthlyCancelBtn').classList.remove('hidden');
+    
+    showNotification('Edit payment details and save to update');
+}
+
+// Function to cancel monthly edit
+function cancelMonthlyEdit() {
+    console.log('🔄 cancelMonthlyEdit() called');
+    console.log('🔍 window.editingMonthlyId:', window.editingMonthlyId);
+    
+    if (window.editingMonthlyId) {
+        // Check if there are unsaved changes
+        const submitBtn = document.querySelector('#monthlyEditForm button[type="submit"]');
+        console.log('🔍 Submit button found:', !!submitBtn);
+        console.log('🔍 Submit button disabled:', submitBtn?.disabled);
+        
+        const hasChanges = !submitBtn.disabled;
+        console.log('🔍 hasChanges:', hasChanges);
+        
+        if (hasChanges) {
+            if (!confirm('You have unsaved changes. Are you sure you want to cancel?')) {
+                console.log('❌ User cancelled the cancel');
+                return;
+            }
+        }
+        
+        // Reset editing state
+        window.editingMonthlyId = null;
+        window.originalMonthlyData = null;
+    }
+    
+    console.log('🔍 About to reset form');
+    // Reset form
+    const editForm = document.getElementById('monthlyEditForm');
+    console.log('🔍 Edit form found:', !!editForm);
+    if (editForm) {
+        editForm.reset();
+    }
+    
+    // 🔑 CRITICAL: Clean up tenant display and show dropdown again
+    const tenantDisplay = document.getElementById('monthlyTenantDisplay');
+    if (tenantDisplay) {
+        tenantDisplay.remove();
+    }
+    
+    const tenantSelect = document.getElementById('monthlyTenantEdit');
+    tenantSelect.style.display = 'block';
+    
+    // Show the "Select Tenant" label again
+    const tenantLabel = document.querySelector('label[for="monthlyTenantEdit"]');
+    if (tenantLabel) {
+        tenantLabel.style.display = 'block';
+    }
+    
+    // Reset form heading
+    document.getElementById('monthlyFormTitle').textContent = 'Record Monthly Payment';
+    
+    // Reset save button text and state
+    const saveBtn = document.querySelector('#monthlyEditForm button[type="submit"]');
+    saveBtn.textContent = 'Record Payment';
+    saveBtn.disabled = false;
+    saveBtn.style.opacity = '1';
+    saveBtn.style.cursor = 'pointer';
+    
+    // Hide cancel button
+    document.getElementById('monthlyCancelBtn').classList.add('hidden');
+    
+    // Hide overlay and restore background scroll
+    console.log('🔍 About to close overlay');
+    const overlay = document.getElementById('monthlyEditOverlay');
+    console.log('🔍 Overlay found:', !!overlay);
+    if (overlay) {
+        overlay.classList.add('hidden');
+        document.body.style.overflow = '';
+        console.log('✅ Overlay closed successfully');
+    } else {
+        console.error('❌ Overlay not found!');
+    }
+    
+    showNotification('Edit cancelled');
+    console.log('✅ cancelMonthlyEdit completed');
+}
+
+function editExpense(id) {
+    console.log('🔄 editExpense() called with id:', id);
+    
+    // Use safe helper to find expense in hierarchical structure
+    let expense = null;
+    let expenseProperty = null;
+    
+    for (const property of data.properties) {
+        if (property.expenses) {
+            const found = property.expenses.find(e => e.id === id);
+            if (found) {
+                expense = found;
+                expenseProperty = property;
+                break;
+            }
+        }
+    }
+    
+    if (!expense) {
+        console.error('❌ Expense not found:', id);
+        showNotification('Expense not found');
+        return;
+    }
+    
+    console.log('✅ Found expense:', expense.description, 'in property:', expenseProperty.name);
+    
+    // Store the original expense data for validation and change detection
+    window.editingExpenseId = id;
+    window.originalExpenseData = {
+        category: expense.category,
+        description: expense.description,
+        reference: expense.reference || '',
+        amount: expense.amount,
+        date: expense.date
+    };
+    
+    // Show overlay and lock background scroll
+    document.getElementById('expenseEditOverlay').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    
+    // Fill form with expense data
+    document.getElementById('expenseCategoryEdit').value = expense.category;
+    document.getElementById('expenseDescriptionEdit').value = expense.description;
+    document.getElementById('expenseReferenceEdit').value = expense.reference || '';
+    document.getElementById('expenseAmountEdit').value = expense.amount;
+    document.getElementById('expenseDateEdit').value = expense.date;
+    
+    // Reset edit state and capture baseline
+    hasExpenseFormChanged = false;
+    captureExpenseFormState();
+    updateExpenseFormButtons();
+    
+    // Change save button text
+    const saveBtn = document.querySelector('#expenseEditForm button[type="submit"]');
+    saveBtn.textContent = 'Update Expense';
+    
+    // Change form heading
+    document.getElementById('expenseFormTitle').textContent = 'Edit Expense';
+    
+    // Show cancel button
+    document.getElementById('expenseCancelBtn').classList.remove('hidden');
+    
+    showNotification('Edit expense details and save to update');
+}
+
+// Function to cancel expense edit
+function cancelExpenseEdit() {
+    if (window.editingExpenseId) {
+        // Check if there are unsaved changes
+        const hasChanges = !document.querySelector('#expenseForm button[type="submit"]').disabled;
+        
+        if (hasChanges) {
+            if (!confirm('You have unsaved changes. Are you sure you want to cancel?')) {
+                return;
+            }
+        }
+        
+        // Reset editing state
+        window.editingExpenseId = null;
+        window.originalExpenseData = null;
+    }
+    
+    // Reset form
+    document.getElementById('expenseForm').reset();
+    
+    // Reset form heading
+    document.getElementById('expenseFormTitle').textContent = 'Add Expense';
+    
+    // Reset save button text and state
+    const saveBtn = document.querySelector('#expenseForm button[type="submit"]');
+    saveBtn.textContent = 'Add Expense';
+    saveBtn.disabled = false;
+    saveBtn.style.opacity = '1';
+    saveBtn.style.cursor = 'pointer';
+    
+    // Hide cancel button
+    document.getElementById('expenseCancelBtn').classList.add('hidden');
+    
+    // Hide overlay and restore background scroll
+    document.getElementById('expenseEditOverlay').classList.add('hidden');
+    document.body.style.overflow = '';
+    
+    showNotification('Edit cancelled');
+}
+
+function editMoveOut(id) {
+    console.log('🔄 editMoveOut() called with id:', id);
+    
+    // Use safe helper to find move out in hierarchical structure
+    let moveOut = null;
+    let moveOutProperty = null;
+    
+    for (const property of data.properties) {
+        if (property.moveOuts) {
+            const found = property.moveOuts.find(m => m.id === id);
+            if (found) {
+                moveOut = found;
+                moveOutProperty = property;
+                break;
+            }
+        }
+    }
+    
+    if (!moveOut) {
+        console.error('❌ Move out not found:', id);
+        showNotification('Move out record not found');
+        return;
+    }
+    
+    console.log('✅ Found move out for tenant:', moveOut.tenantName, 'in property:', moveOutProperty.name);
+    
+    // Store the original move out data for validation and change detection
+    window.editingMoveOutId = id;
+    window.originalMoveOutData = {
+        tenantId: moveOut.tenantId,
+        date: moveOut.date,
+        depositReturned: moveOut.depositReturned || '',
+        notes: moveOut.notes || ''
+    };
+    
+    // Show overlay and lock background scroll
+    document.getElementById('moveOutEditOverlay').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    
+    // Fill form with move out data
+    document.getElementById('moveoutTenantEdit').value = moveOut.tenantId;
+    document.getElementById('moveoutDateEdit').value = moveOut.date;
+    document.getElementById('depositReturnedEdit').value = moveOut.depositReturned || '';
+    document.getElementById('moveoutNotesEdit').value = moveOut.notes || '';
+    
+    // Reset edit state and capture baseline
+    hasMoveOutFormChanged = false;
+    captureMoveOutFormState();
+    updateMoveOutFormButtons();
+    
+    // Change save button text
+    const saveBtn = document.querySelector('#moveoutEditForm button[type="submit"]');
+    saveBtn.textContent = 'Update Move Out';
+    
+    // Change form heading
+    document.getElementById('moveOutFormTitle').textContent = 'Edit Move Out';
+    
+    // Show cancel button
+    document.getElementById('moveOutCancelBtn').classList.remove('hidden');
+    
+    showNotification('Edit move out details and save to update');
+}
+
+// Function to cancel move out edit
+function cancelMoveOutEdit() {
+    if (window.editingMoveOutId) {
+        // Check if there are unsaved changes
+        const hasChanges = !document.querySelector('#moveoutForm button[type="submit"]').disabled;
+        
+        if (hasChanges) {
+            if (!confirm('You have unsaved changes. Are you sure you want to cancel?')) {
+                return;
+            }
+        }
+        
+        // Reset editing state
+        window.editingMoveOutId = null;
+        window.originalMoveOutData = null;
+    }
+    
+    // Reset form
+    document.getElementById('moveoutForm').reset();
+    
+    // Reset form heading
+    document.getElementById('moveOutFormTitle').textContent = 'Record Move Out';
+    
+    // Reset save button text and state
+    const saveBtn = document.querySelector('#moveoutForm button[type="submit"]');
+    saveBtn.textContent = 'Record Move Out';
+    saveBtn.disabled = false;
+    saveBtn.style.opacity = '1';
+    saveBtn.style.cursor = 'pointer';
+    
+    // Hide cancel button
+    document.getElementById('moveOutCancelBtn').classList.add('hidden');
+    
+    // Hide overlay and restore background scroll
+    document.getElementById('moveOutEditOverlay').classList.add('hidden');
+    document.body.style.overflow = '';
+    
+    showNotification('Edit cancelled');
+}
+
+// ===== QUERY FUNCTIONS =====
+function addQuery() {
+    // Validate that a property is selected
+    if (!data.selectedPropertyId) {
+        showNotification('Please select a property first!');
+        return;
+    }
+    
+    const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
+    if (!selectedProperty) {
+        showNotification('Selected property not found!');
+        return;
+    }
+    
+    // Ensure property queries array exists
+    if (!selectedProperty.queries) selectedProperty.queries = [];
+    const tenantId = document.getElementById('queryTenant').value;
+    const date = document.getElementById('queryDate').value || new Date().toISOString().split('T')[0];
+    const issue = document.getElementById('queryIssue').value || '';
+    const action = document.getElementById('queryAction').value || '';
+    const resolved = document.getElementById('queryResolved').value === 'true';
+
+    if (!tenantId) {
+        showNotification('Please select a tenant for the query');
+        return;
+    }
+
+    const q = {
+        id: window.editingQueryId || Date.now(),
+        tenantId: tenantId,
+        date: date,
+        issue: issue,
+        action: action,
+        resolved: resolved,
+        createdAt: new Date().toISOString()
+    };
+
+    if (window.editingQueryId) {
+        // Update existing query
+        const index = selectedProperty.queries.findIndex(query => query.id === window.editingQueryId);
+        if (index !== -1) {
+            selectedProperty.queries[index] = q;
+            showNotification('Query updated successfully!');
+        }
+        window.editingQueryId = null;
+    } else {
+        // Add new query to selected property
+        selectedProperty.queries.push(q);
+        showNotification('Query logged');
+    }
+
+    saveData();
+    renderQueries();
+    
+    // Reset form and button state
+    document.getElementById('queryForm').reset();
+    
+    const saveBtn = document.querySelector('#queryForm button[type="submit"]');
+    if (saveBtn) {
+        saveBtn.textContent = 'Add Query';
+    }
+    
+    // Remove cancel button
+    const cancelBtn = document.getElementById('queryCancelBtn');
+    if (cancelBtn) {
+        cancelBtn.remove();
+    }
+}
+
+function renderQueries() {
+    const container = document.getElementById('queriesList');
+    if (!container) return;
+    
+    // Get queries from selected property
+    let queries = [];
+    let propertyTenants = [];
+    
+    if (data.selectedPropertyId) {
+        const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
+        if (selectedProperty) {
+            queries = selectedProperty.queries || [];
+            propertyTenants = selectedProperty.tenants || [];
+        }
+    }
+    
+    if (!queries || queries.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">📝</div>
+                <div class="empty-state-text">No queries yet</div>
+                <div class="empty-state-subtext">Tenant queries will appear here</div>
+            </div>
+        `;
+        return;
+    }
+
+    const tenantsById = propertyTenants.reduce((acc, t) => { acc[t.id] = t; return acc; }, {});
+
+    container.innerHTML = queries.slice().reverse().map(q => `
+        <div class="entry-card query-card">
+            <div class="query-header">
+                <div class="query-tenant">${q.tenantId === 'general' ? 'General (not tenant-specific)' : (tenantsById[q.tenantId] ? tenantsById[q.tenantId].name + (tenantsById[q.tenantId].unit ? ' — ' + tenantsById[q.tenantId].unit : '') : 'Unknown Tenant')}</div>
+                <div class="query-actions">
+                    <div class="query-date">${new Date(q.date).toLocaleDateString()}</div>
+                    <button class="btn btn-small ${q.resolved ? 'btn-success' : 'btn-secondary'}" onclick="toggleQueryResolved(${q.id})">${q.resolved ? 'Resolved' : 'Mark Resolved'}</button>
+                    <button class="btn btn-small btn-secondary" onclick="editQuery(${q.id})">Edit</button>
+                    <button class="btn btn-small btn-danger" onclick="deleteQuery(${q.id})">Delete</button>
+                </div>
+            </div>
+            <div class="query-details">
+                <div>Issue: ${q.issue || '—'}</div>
+                <div>Action: ${q.action || '—'}</div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function toggleQueryResolved(id) {
+    // Find and toggle query in hierarchical structure
+    for (const property of data.properties) {
+        if (property.queries) {
+            const query = property.queries.find(q => q.id === id);
+            if (query) {
+                query.resolved = !query.resolved;
+                saveData();
+                renderQueries();
+                showNotification(query.resolved ? 'Query marked resolved' : 'Query marked unresolved');
+                return;
+            }
+        }
+    }
+    showNotification('Query not found');
+}
+
+function deleteQuery(id) {
+    if (!confirm('Delete this query?')) return;
+    
+    // Find and delete query in hierarchical structure
+    let deleted = false;
+    for (const property of data.properties) {
+        if (property.queries) {
+            const index = property.queries.findIndex(q => q.id === id);
+            if (index !== -1) {
+                property.queries.splice(index, 1);
+                deleted = true;
+                break;
+            }
+        }
+    }
+    
+    if (deleted) {
+        saveData();
+        renderQueries();
+        showToast('Query deleted', 'success');
+    } else {
+        showNotification('Query not found');
+    }
+}
+
+function editQuery(id) {
+    console.log('🔄 editQuery() called with id:', id);
+    
+    // Use safe helper to find query in hierarchical structure
+    let query = null;
+    let queryProperty = null;
+    
+    for (const property of data.properties) {
+        if (property.queries) {
+            const found = property.queries.find(q => q.id === id);
+            if (found) {
+                query = found;
+                queryProperty = property;
+                break;
+            }
+        }
+    }
+    
+    if (!query) {
+        console.error('❌ Query not found:', id);
+        showNotification('Query not found');
+        return;
+    }
+    
+    console.log('✅ Found query:', query.subject, 'in property:', queryProperty.name);
+    
+    // Fill form with query data
+    document.getElementById('queryTenant').value = query.tenantId || '';
+    document.getElementById('queryDate').value = query.date || '';
+    document.getElementById('queryIssue').value = query.issue || '';
+    document.getElementById('queryAction').value = query.action || '';
+    document.getElementById('queryResolved').value = query.resolved ? 'true' : 'false';
+    
+    // Store the query ID for update
+    window.editingQueryId = id;
+    
+    // Change save button text
+    const saveBtn = document.querySelector('#queryForm button[type="submit"]');
+    if (saveBtn) {
+        saveBtn.textContent = 'Update Query';
+    }
+    
+    // Add cancel button if it doesn't exist
+    let cancelBtn = document.getElementById('queryCancelBtn');
+    if (!cancelBtn) {
+        cancelBtn = document.createElement('button');
+        cancelBtn.id = 'queryCancelBtn';
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'btn btn-secondary';
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.onclick = cancelQueryEdit;
+        
+        const formActions = document.querySelector('#queryForm .form-actions');
+        if (formActions) {
+            formActions.insertBefore(cancelBtn, formActions.firstChild);
+        }
+    }
+    
+    // Scroll to form
+    document.getElementById('queryForm').scrollIntoView({ behavior: 'smooth' });
+    
+    showNotification('Edit query details and save to update');
+}
+
+function cancelQueryEdit() {
+    // Reset form
+    document.getElementById('queryForm').reset();
+    
+    // Reset save button text
+    const saveBtn = document.querySelector('#queryForm button[type="submit"]');
+    if (saveBtn) {
+        saveBtn.textContent = 'Add Query';
+    }
+    
+    // Remove cancel button
+    const cancelBtn = document.getElementById('queryCancelBtn');
+    if (cancelBtn) {
+        cancelBtn.remove();
+    }
+    
+    // Clear editing state
+    window.editingQueryId = null;
+    
+    showNotification('Edit cancelled');
+}
+
+// ===== USER MENU FUNCTIONS =====
+function toggleUserMenu() {
+    const slideout = document.querySelector('.user-slideout');
+    const overlay = document.querySelector('.slideout-overlay');
+    slideout.classList.add('active');
+    overlay.classList.add('active');
+    updateSlideoutUserInfo();
+}
+
+function closeUserMenu() {
+    const slideout = document.querySelector('.user-slideout');
+    const overlay = document.querySelector('.slideout-overlay');
+    slideout.classList.remove('active');
+    overlay.classList.remove('active');
+}
+
+function showBackupSection() {
+    // Switch to backup tab
+    document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+    
+    const backupTab = document.querySelector('[onclick*="backup"]');
+    const backupContent = document.getElementById('backup');
+    
+    if (backupTab) backupTab.classList.add('active');
+    if (backupContent) backupContent.classList.add('active');
+}
+
+function updateSlideoutUserInfo() {
+    const userNameElement = document.getElementById('slideoutUserName');
+    const userEmailElement = document.getElementById('slideoutUserEmail');
+    
+    if (currentUser && userNameElement && userEmailElement) {
+        userNameElement.textContent = currentUser.displayName || 'User';
+        userEmailElement.textContent = currentUser.email || 'user@example.com';
+    }
+}
+
+// ===== SPLASH SCREEN FUNCTIONS =====
+function hideSplash() {
+    const splashContainer = document.getElementById('splashContainer');
+    if (splashContainer) {
+        splashContainer.classList.add('hidden');
+        setTimeout(() => {
+            splashContainer.style.display = 'none';
+        }, 500);
+        
+        // Show auth container if user is not authenticated
+        if (!currentUser) {
+            document.getElementById('authContainer').style.display = 'flex';
+        }
+    }
+}
+
+// ===== DOCUMENT MANAGEMENT FUNCTIONS =====
+function removeIdDocument(index) {
+    // Find the tenant being edited in hierarchical structure
+    let editingTenant = null;
+    for (const property of data.properties) {
+        if (property.tenants) {
+            const found = property.tenants.find(t => t.id === window.editingTenantId);
+            if (found) {
+                editingTenant = found;
+                break;
+            }
+        }
+    }
+    
+    if (editingTenant && editingTenant.idDocuments) {
+        editingTenant.idDocuments.splice(index, 1);
+        
+        // Update change state
+        hasTenantFormChanged = true;
+        updateTenantFormButtons();
+        
+        // Refresh the display without re-populating the form
+        displayIdDocuments(editingTenant);
+        
+        showNotification('Document removed. Save tenant to apply changes.');
+    }
+}
+
+function removeSingleIdDocument() {
+    // Find the tenant being edited in hierarchical structure
+    let editingTenant = null;
+    for (const property of data.properties) {
+        if (property.tenants) {
+            const found = property.tenants.find(t => t.id === window.editingTenantId);
+            if (found) {
+                editingTenant = found;
+                break;
+            }
+        }
+    }
+    
+    if (editingTenant) {
+        editingTenant.idDocument = null;
+        editingTenant.idDocuments = [];
+        
+        // Update change state
+        hasTenantFormChanged = true;
+        updateTenantFormButtons();
+        
+        // Refresh the display without re-populating the form
+        displayIdDocuments(editingTenant);
+        
+        showNotification('Document removed. Save tenant to apply changes.');
+    }
+}
+
+function removeNewFile(index) {
+    console.log('removeNewFile called with index:', index);
+    if (!confirm('Are you sure you want to remove this file?')) {
+        return;
+    }
+    
+    const fileInput = document.getElementById('tenantIdDocument');
+    const dt = new DataTransfer();
+    
+    // Add all files except the one being removed
+    const currentFiles = Array.from(fileInput.files);
+    console.log('Current files before removal:', currentFiles.length);
+    for (let i = 0; i < currentFiles.length; i++) {
+        if (i !== index) {
+            dt.items.add(currentFiles[i]);
+        }
+    }
+    
+    // Update the file input
+    fileInput.files = dt.files;
+    
+    // Update the stored files array
+    window.existingIdFiles = Array.from(dt.files);
+    console.log('Files after removal:', dt.files.length);
+    
+    // Update display directly
+    if (dt.files.length === 0) {
+        document.getElementById('tenantIdDocumentDisplay').innerHTML = '';
+    } else {
+        let filesHtml = '<div>';
+        for (let i = 0; i < dt.files.length; i++) {
+            filesHtml += `
+                <div>
+                    <span>${dt.files[i].name}</span>
+                    <button type="button" onclick="removeNewFile(${i})">×</button>
+                </div>
+            `;
+        }
+        filesHtml += '</div>';
+        document.getElementById('tenantIdDocumentDisplay').innerHTML = filesHtml;
+    }
+    
+    // Update upload button state
+    const uploadBtn = document.getElementById('idUploadBtn');
+    if (dt.files.length < 3) {
+        uploadBtn.disabled = false;
+        uploadBtn.style.opacity = '1';
+        uploadBtn.style.cursor = 'pointer';
+        uploadBtn.textContent = 'Upload';
+    }
+    
+    // Update change state
+    if (window.editingTenantId) {
+        hasTenantFormChanged = true;
+        updateTenantFormButtons();
+    }
+}
+
+function removeNewLeaseFile(index) {
+    console.log('removeNewLeaseFile called with index:', index);
+    if (!confirm('Are you sure you want to remove this file?')) {
+        return;
+    }
+    
+    const fileInput = document.getElementById('leaseDocument');
+    const dt = new DataTransfer();
+    
+    // Add all files except the one being removed
+    const currentFiles = Array.from(fileInput.files);
+    console.log('Current lease files before removal:', currentFiles.length);
+    for (let i = 0; i < currentFiles.length; i++) {
+        if (i !== index) {
+            dt.items.add(currentFiles[i]);
+        }
+    }
+    
+    // Update the file input
+    fileInput.files = dt.files;
+    
+    // Update the stored files array
+    window.existingLeaseFiles = Array.from(dt.files);
+    console.log('Lease files after removal:', dt.files.length);
+    
+    // Update display directly
+    if (dt.files.length === 0) {
+        document.getElementById('leaseDocumentDisplay').innerHTML = '';
+    } else {
+        let filesHtml = '<div>';
+        for (let i = 0; i < dt.files.length; i++) {
+            filesHtml += `
+                <div>
+                    <span>${dt.files[i].name}</span>
+                    <button type="button" onclick="removeNewLeaseFile(${i})">×</button>
+                </div>
+            `;
+        }
+        filesHtml += '</div>';
+        document.getElementById('leaseDocumentDisplay').innerHTML = filesHtml;
+    }
+    
+    // Update upload button state
+    const uploadBtn = document.getElementById('leaseUploadBtn');
+    if (dt.files.length < 3) {
+        uploadBtn.disabled = false;
+        uploadBtn.style.opacity = '1';
+        uploadBtn.style.cursor = 'pointer';
+        uploadBtn.textContent = 'Upload';
+    }
+    
+    // Update change state
+    if (window.editingTenantId) {
+        hasTenantFormChanged = true;
+        updateTenantFormButtons();
+    }
+}
+
+function removeLeaseDocument(index) {
+    // Find the tenant being edited in hierarchical structure
+    let editingTenant = null;
+    for (const property of data.properties) {
+        if (property.tenants) {
+            const found = property.tenants.find(t => t.id === window.editingTenantId);
+            if (found) {
+                editingTenant = found;
+                break;
+            }
+        }
+    }
+    
+    if (editingTenant && editingTenant.leaseDocuments) {
+        editingTenant.leaseDocuments.splice(index, 1);
+        
+        // Update change state
+        hasTenantFormChanged = true;
+        updateTenantFormButtons();
+        
+        // Refresh the display without re-populating the form
+        const leaseDisplay = document.getElementById('leaseDocumentDisplay');
+        if (editingTenant.leaseDocuments.length > 0) {
+            let leaseFilesHtml = '<div>';
+            editingTenant.leaseDocuments.forEach((doc, idx) => {
+                leaseFilesHtml += `
+                    <div>
+                        <span>${doc.name}</span>
+                        <button type="button" onclick="removeLeaseDocument(${idx})">×</button>
+                    </div>
+                `;
+            });
+            leaseFilesHtml += '</div>';
+            leaseDisplay.innerHTML = leaseFilesHtml;
+        } else {
+            leaseDisplay.innerHTML = '<span>No documents uploaded</span>';
+        }
+        
+        // Update upload button state
+        const uploadBtn = document.getElementById('leaseUploadBtn');
+        if (tenant.leaseDocuments.length < 3) {
+            uploadBtn.disabled = false;
+            uploadBtn.style.opacity = '1';
+            uploadBtn.style.cursor = 'pointer';
+            uploadBtn.textContent = 'Upload';
+        }
+        
+        showNotification('Lease document removed. Save tenant to apply changes.');
+    }
+}
+
+// Process ID documents for different modes
+function processIdDocuments(existingIdDocuments, existingIdDocument, newFiles) {
+    if (window.idDocumentMode === 'add') {
+        // Add more mode: keep existing and add new
+        const combined = existingIdDocuments ? [...existingIdDocuments] : [];
+        if (existingIdDocument && !existingIdDocuments) {
+            // Convert old single format to array
+            combined.push(existingIdDocument);
+        }
+        
+        // Add new files
+        for (let file of newFiles) {
+            combined.push({
+                name: file.name,
+                size: file.size,
+                type: file.type,
+                lastModified: file.lastModified
+            });
+        }
+        return combined;
+    } else {
+        // Replace mode: replace all with new files
+        const result = [];
+        for (let file of newFiles) {
+            result.push({
+                name: file.name,
+                size: file.size,
+                type: file.type,
+                lastModified: file.lastModified
+            });
+        }
+        return result;
+    }
+}
+
+// ===== EXPOSE FUNCTIONS TO GLOBAL SCOPE =====
+window.showTab = showTab;
+window.deleteTenant = deleteTenant;
+window.deleteMonthly = deleteMonthly;
+window.deleteExpense = deleteExpense;
+window.deleteMoveOut = deleteMoveOut;
+window.removeLeaseDocument = removeLeaseDocument;
+window.removeIdDocument = removeIdDocument;
+window.removeSingleIdDocument = removeSingleIdDocument;
+window.removeNewFile = removeNewFile;
+window.removeNewLeaseFile = removeNewLeaseFile;
+window.installApp = window.installApp;
+window.exportData = exportData;
+window.exportCSV = exportCSV;
+window.importData = importData;
+window.clearAllData = clearAllData;
+window.editTenant = editTenant;
+window.editMonthly = editMonthly;
+window.editExpense = editExpense;
+window.editMoveOut = editMoveOut;
+window.cancelMonthlyEdit = cancelMonthlyEdit;
+window.cancelExpenseEdit = cancelExpenseEdit;
+window.cancelMoveOutEdit = cancelMoveOutEdit;
+window.loginWithGoogle = loginWithGoogle;
+window.logoutUser = logoutUser;
+window.toggleUserMenu = toggleUserMenu;
+window.closeUserMenu = closeUserMenu;
+window.showBackupSection = showBackupSection;
+window.editProperty = editProperty;
+window.cancelPropertyEdit = cancelPropertyEdit;
+window.updateProperty = updateProperty;
+window.backToProperties = backToProperties;
+window.selectProperty = selectProperty;
+window.toggleTenantForm = toggleTenantForm;
+window.toggleMonthlyForm = toggleMonthlyForm;
+window.toggleExpenseForm = toggleExpenseForm;
+window.showUpdatePrompt = showUpdatePrompt;
+window.dismissUpdate = dismissUpdate;
+window.applyUpdate = applyUpdate;
+window.addNewTenant = addNewTenant;
+window.showAddPropertyForm = showAddPropertyForm;
+window.hideAddPropertyForm = hideAddPropertyForm;
