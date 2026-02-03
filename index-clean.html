@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Inzu</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="icon-512.png">
+    <link rel="apple-touch-icon" href="icon-512.png">
+    <meta name="theme-color" content="#A64456">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Splash Screen -->
+    <div id="splashContainer" class="splash-container">
+        <img src="logo.png" alt="Inzu" class="splash-logo">
+        <h1 class="splash-title">Inzu</h1>
+        <p class="splash-subtitle">Property Management Made Simple</p>
+        <button class="splash-get-started" onclick="hideSplash()">Get Started</button>
+    </div>
+
+    <!-- Authentication Container -->
+    <div id="authContainer" class="auth-container" style="display: none;">
+        <div class="auth-card">
+            <img src="logo.png" alt="Inzu" class="app-logo" style="width: 80px; height: 80px; margin-bottom: 20px;">
+            <h2>Welcome to Inzu</h2>
+            <p>Sign in to manage your properties</p>
+            <button class="google-btn" onclick="loginWithGoogle()">
+                <svg class="google-icon" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Sign in with Google
+            </button>
+        </div>
+    </div>
+
+    <!-- Main App Content -->
+    <div id="appContent" class="app-container" style="display: none;">
+        <div class="app-header">
+            <div class="brand">
+                <img src="logo.png" alt="Inzu" class="app-logo">
+                <div>
+                    <h1>Inzu</h1>
+                    <p>Property Management</p>
+                </div>
+            </div>
+            <div class="user-menu">
+                <div class="user-avatar" onclick="toggleUserMenu()">
+                    <svg viewBox="0 0 24 24" width="24" height="24">
+                        <path fill="white" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div class="tab-navigation">
+            <button class="tab-button" onclick="showTab('property', this)">Properties</button>
+            <button class="tab-button" onclick="showTab('tenants', this)">Tenants</button>
+            <button class="tab-button" onclick="showTab('monthly', this)">Monthly</button>
+            <button class="tab-button" onclick="showTab('expenses', this)">Expenses</button>
+            <button class="tab-button" onclick="showTab('summary', this)">Summary</button>
+        </div>
+
+        <!-- Content Area -->
+        <div class="content-area">
+            <!-- Properties Tab -->
+            <div id="property" class="tab-content active">
+                <div class="form-card">
+                    <h3>🏢 Properties</h3>
+                    <button class="btn btn-primary" onclick="showAddPropertyForm()">➕ Add Property</button>
+                </div>
+                
+                <div class="properties-list" id="propertiesList">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🏢</div>
+                        <div class="empty-state-text">No properties yet</div>
+                        <div class="empty-state-subtext">Add your first property to get started</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tenants Tab -->
+            <div id="tenants" class="tab-content">
+                <div class="form-card">
+                    <h3>👥 Tenants</h3>
+                    <button class="toggle-btn" onclick="toggleTenantForm()">➕ Add Tenant</button>
+                    
+                    <div id="tenantForm" class="collapsible collapsed">
+                        <form id="addTenantForm">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Tenant Name</label>
+                                    <input type="text" id="newTenantName" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Unit</label>
+                                    <select id="newTenantUnit" required>
+                                        <option value="">Select unit...</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Monthly Rent</label>
+                                    <input type="number" id="newTenantRent" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Phone</label>
+                                    <input type="tel" id="newTenantPhone">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Email</label>
+                                <input type="email" id="newTenantEmail">
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-primary">Add Tenant</button>
+                                <button type="button" class="btn btn-secondary" onclick="toggleTenantForm()">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="entries-list" id="tenantsList">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">👥</div>
+                        <div class="empty-state-text">No tenants yet</div>
+                        <div class="empty-state-subtext">Add tenants to manage your properties</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Monthly Tab -->
+            <div id="monthly" class="tab-content">
+                <div class="form-card">
+                    <h3>💳 Monthly Payments</h3>
+                    <button class="toggle-btn" onclick="toggleMonthlyForm()">➕ Add Payment</button>
+                    
+                    <div id="monthlyForm" class="collapsible collapsed">
+                        <form id="addMonthlyForm">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Tenant</label>
+                                    <select id="monthlyTenant" required>
+                                        <option value="">Choose a tenant...</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Amount</label>
+                                    <input type="number" id="monthlyAmount" required>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Payment Date</label>
+                                    <input type="date" id="monthlyDate" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Payment Method</label>
+                                    <select id="monthlyMethod">
+                                        <option value="cash">Cash</option>
+                                        <option value="bank">Bank Transfer</option>
+                                        <option value="mpesa">M-Pesa</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Notes</label>
+                                <textarea id="monthlyNotes" rows="3"></textarea>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-primary">Add Payment</button>
+                                <button type="button" class="btn btn-secondary" onclick="toggleMonthlyForm()">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="entries-list" id="monthlyList">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">💳</div>
+                        <div class="empty-state-text">No payments recorded</div>
+                        <div class="empty-state-subtext">Add monthly payments to track income</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Expenses Tab -->
+            <div id="expenses" class="tab-content">
+                <div class="form-card">
+                    <h3>📋 Expenses</h3>
+                    <button class="toggle-btn" onclick="toggleExpenseForm()">➕ Add Expense</button>
+                    
+                    <div id="expenseForm" class="collapsible collapsed">
+                        <form id="addExpenseForm">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Expense Category</label>
+                                    <select id="expenseCategory" required>
+                                        <option value="">Select category...</option>
+                                        <option value="maintenance">Maintenance</option>
+                                        <option value="utilities">Utilities</option>
+                                        <option value="repairs">Repairs</option>
+                                        <option value="insurance">Insurance</option>
+                                        <option value="taxes">Taxes</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Amount</label>
+                                    <input type="number" id="expenseAmount" required>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Expense Date</label>
+                                    <input type="date" id="expenseDate" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Payment Method</label>
+                                    <select id="expenseMethod">
+                                        <option value="cash">Cash</option>
+                                        <option value="bank">Bank Transfer</option>
+                                        <option value="mpesa">M-Pesa</option>
+                                        <option value="card">Credit Card</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Description</label>
+                                <textarea id="expenseDescription" rows="3" required></textarea>
+                            </div>
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-primary">Add Expense</button>
+                                <button type="button" class="btn btn-secondary" onclick="toggleExpenseForm()">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="entries-list" id="expensesList">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📋</div>
+                        <div class="empty-state-text">No expenses recorded</div>
+                        <div class="empty-state-subtext">Add expenses to track your costs</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Tab -->
+            <div id="summary" class="tab-content">
+                <div class="form-card">
+                    <h3>📊 Summary Report</h3>
+                    <div class="summary-cards" id="summaryCards">
+                        <div class="summary-card">
+                            <h4>Total Income</h4>
+                            <div class="summary-amount income">Ksh 0</div>
+                        </div>
+                        <div class="summary-card">
+                            <h4>Total Expenses</h4>
+                            <div class="summary-amount expense">Ksh 0</div>
+                        </div>
+                        <div class="summary-card">
+                            <h4>Net Income</h4>
+                            <div class="summary-amount net">Ksh 0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-card">
+                    <h3>Monthly Breakdown</h3>
+                    <div id="summaryTable">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📈</div>
+                            <div class="empty-state-text">No data to summarize</div>
+                            <div class="empty-state-subtext">Add tenants and payments to see reports</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Online</span>
+            </div>
+            <div id="lastSaved"></div>
+        </div>
+    </div>
+
+    <!-- User Menu Slideout -->
+    <div class="slideout-overlay" onclick="closeUserMenu()"></div>
+    <div class="user-slideout">
+        <div class="slideout-header">
+            <h3>User Menu</h3>
+            <button class="slideout-close" onclick="closeUserMenu()">×</button>
+        </div>
+        <div class="slideout-content">
+            <div class="user-info">
+                <div class="user-avatar-large">
+                    <svg viewBox="0 0 24 24" width="48" height="48">
+                        <path fill="white" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                    </svg>
+                </div>
+                <div class="user-name" id="userName">User</div>
+                <div class="user-email" id="userEmail">user@example.com</div>
+            </div>
+            <ul class="slideout-menu">
+                <li><button onclick="exportData()">📥 Export Data</button></li>
+                <li><button onclick="importData()">📤 Import Data</button></li>
+                <li><button onclick="clearAllData()">🗑️ Clear All Data</button></li>
+                <li><button class="logout" onclick="logoutUser()">🚪 Logout</button></li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Firebase Configuration -->
+    <script type="module" src="firebase-config.js"></script>
+    <script type="module" src="script.js"></script>
+</body>
+</html>

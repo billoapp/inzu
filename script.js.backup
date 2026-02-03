@@ -146,16 +146,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Check authentication status
 function checkAuthStatus() {
-    console.log('🔐 Checking auth status...');
-    
     onAuthStateChanged(auth, (user) => {
-        console.log('🔐 Auth state changed:', user ? 'User logged in' : 'No user');
-        
         if (user) {
             currentUser = user;
-            console.log('🔐 User ID:', user.uid);
-            console.log('🔐 User email:', user.email);
-            
             // For returning users, hide splash and show app
             hideSplash();
             document.getElementById('authContainer').style.display = 'none';
@@ -165,22 +158,8 @@ function checkAuthStatus() {
             updateSlideoutUserInfo();
             
             // Load data using best practices
-            loadData().then((loadedData) => {
-                console.log('📊 Data loaded successfully:', loadedData);
-                console.log('📊 Properties count:', loadedData?.properties?.length || 0);
-                
-                // Clear selectedPropertyId to start fresh (user must click a property to see tabs)
-                // This prevents tabs from showing if they were previously selected
-                if (data.selectedPropertyId) {
-                    console.log('🔄 Clearing selectedPropertyId from saved data');
-                    data.selectedPropertyId = null;
-                    saveData();
-                }
-                
-                // Initialize navigation to hide tabs
-                initializeNavigation();
-                
-                // After data is loaded and navigation is initialized, update UI
+            loadData().then(() => {
+                // After data is loaded, update UI
                 renderAllEntries();
                 updateTenantSelects();
                 updateSummary();
@@ -192,12 +171,12 @@ function checkAuthStatus() {
             
             cleanupInvalidTenants();
             initializeForms();
+            initializeNavigation();
             setDefaultDates();
             initializePWA();
             setupRealtimeSync();
         } else {
             currentUser = null;
-            console.log('🔐 No user - hiding auth and app containers');
             // For new users, hide both auth and app initially
             // Let user click "Get Started" first to show auth
             document.getElementById('authContainer').style.display = 'none';
@@ -210,13 +189,9 @@ function checkAuthStatus() {
 async function loginWithGoogle() {
     try {
         showNotification('Opening Google Sign-In...');
-        console.log('🔐 Attempting Google Sign-In...');
-        
         // Ensure auth persistence is set to local so user remains signed in after refresh
         await setPersistence(auth, browserLocalPersistence);
         const result = await signInWithPopup(auth, googleProvider);
-        
-        console.log('🔐 Sign-In successful:', result.user.email);
         showNotification(`Welcome, ${result.user.displayName || result.user.email}!`);
     } catch (error) {
         console.error('Login error details:', error && error.code, error && error.message);
@@ -282,22 +257,9 @@ async function loadData() {
     
     // 1. Try Firebase first (most reliable)
     if (currentUser) {
-        console.log('📡 Current user:', currentUser.uid);
         try {
-            // First try user-specific path
-            const userDataRef = ref(database, `users/${currentUser.uid}/rentalData`);
-            console.log('📡 Fetching from Firebase path:', `users/${currentUser.uid}/rentalData`);
-            let snapshot = await get(userDataRef);
-            
-            console.log('📡 Firebase user path snapshot exists:', snapshot.exists());
-            
-            if (!snapshot.exists()) {
-                // Try root path for backward compatibility
-                const rootDataRef = ref(database, 'rentalData');
-                console.log('📡 Trying root path: rentalData');
-                snapshot = await get(rootDataRef);
-                console.log('📡 Firebase root path snapshot exists:', snapshot.exists());
-            }
+            const dataRef = ref(database, `users/${currentUser.uid}/rentalData`);
+            const snapshot = await get(dataRef);
             
             if (snapshot.exists()) {
                 console.log('✅ Loaded data from Firebase');
@@ -308,16 +270,11 @@ async function loadData() {
                 localStorage.setItem('lastSaved', new Date().toLocaleString());
                 
                 migrateToHierarchicalStructure();
-                console.log('📊 Data loaded:', JSON.stringify(data, null, 2));
                 return data;
-            } else {
-                console.log('📡 No data in Firebase, checking localStorage...');
             }
         } catch (error) {
-            console.warn('⚠️ Firebase unavailable, trying localStorage:', error.code, error.message);
+            console.warn('⚠️ Firebase unavailable, trying localStorage:', error);
         }
-    } else {
-        console.log('⚠️ No user logged in, skipping Firebase');
     }
     
     // 2. Fallback to localStorage
@@ -334,7 +291,6 @@ async function loadData() {
             }
             
             migrateToHierarchicalStructure();
-            console.log('📊 Data loaded:', JSON.stringify(data, null, 2));
             return data;
         }
     } catch (error) {
@@ -597,16 +553,10 @@ async function saveToFirebaseOnly(dataToSave) {
         console.log('📤 Saving to Firebase...');
         updateSyncStatus('syncing');
         
-        // Save to user-specific path
-        const userDataRef = ref(database, `users/${currentUser.uid}/rentalData`);
-        await set(userDataRef, dataToSave);
-        console.log('✅ Data saved to Firebase user path');
+        const dataRef = ref(database, `users/${currentUser.uid}/rentalData`);
+        await set(dataRef, dataToSave);
         
-        // Also save to root path for backward compatibility
-        const rootDataRef = ref(database, 'rentalData');
-        await set(rootDataRef, dataToSave);
-        console.log('✅ Data saved to Firebase root path');
-        
+        console.log('✅ Data saved to Firebase');
         updateSyncStatus('synced');
         
     } catch (error) {
@@ -902,194 +852,97 @@ function savePropertyInfo() {
 }
 
 function selectProperty(propertyId) {
-    console.log('🔍 selectProperty called with propertyId:', propertyId, 'type:', typeof propertyId);
-    
-    // Convert to number to ensure consistent type comparison
-    const numericPropertyId = parseInt(propertyId, 10);
-    console.log('🔍 numericPropertyId:', numericPropertyId);
-    
-    const property = data.properties.find(p => {
-        console.log('🔍 comparing p.id:', p.id, 'type:', typeof p.id, 'with numericPropertyId:', numericPropertyId);
-        return p.id === numericPropertyId;
-    });
-    
-    console.log('🔍 found property:', property);
-    
-    data.selectedPropertyId = numericPropertyId;
-    console.log('🔍 data.selectedPropertyId set to:', data.selectedPropertyId);
-    
+    const property = data.properties.find(p => p.id === propertyId);
+    data.selectedPropertyId = propertyId;
     saveData();
+    renderProperties();
     
-    // === TOGGLE VISIBILITY ===
-    // Hide: Property cards COMPLETELY
-    const propertyCards = document.querySelectorAll('.property-card');
-    propertyCards.forEach(card => {
-        card.style.display = 'none';
-        console.log('🔍 Property card hidden');
+    // Show property management navigation
+    document.getElementById('propertyNavigation').style.display = 'flex';
+    
+    // Show action buttons rows in all property management tabs
+    const actionRows = document.querySelectorAll('.action-buttons-row');
+    console.log('🔍 Found action rows:', actionRows.length);
+    actionRows.forEach((row, index) => {
+        console.log(`🔍 Action row ${index}:`, row);
+        console.log(`🔍 Classes before:`, row.className);
+        row.classList.remove('hidden');
+        console.log(`🔍 Classes after:`, row.className);
+        console.log(`🔍 Display style:`, window.getComputedStyle(row).display);
     });
     
-    // Hide: Property title bar COMPLETELY
-    const propertyHeaderCard = document.getElementById('propertyHeaderCard');
-    if (propertyHeaderCard) {
-        propertyHeaderCard.style.display = 'none';
-        console.log('🔍 Property header card hidden');
+    // Force show specific action rows for Move Outs and Queries
+    const moveOutActionRow = document.querySelector('#moveouts .action-buttons-row');
+    const queryActionRow = document.querySelector('#queries .action-buttons-row');
+    
+    if (moveOutActionRow) {
+        console.log('🔍 Move Out action row found:', moveOutActionRow);
+        moveOutActionRow.classList.remove('hidden');
+        moveOutActionRow.style.display = 'flex';
+        
+        // Check if the button exists and is visible
+        const moveOutButton = document.getElementById('moveoutToggleBtn');
+        if (moveOutButton) {
+            console.log('✅ Move Out button found:', moveOutButton);
+            console.log('🔍 Button text:', moveOutButton.textContent);
+            console.log('🔍 Button display:', window.getComputedStyle(moveOutButton).display);
+            console.log('🔍 Button visibility:', window.getComputedStyle(moveOutButton).visibility);
+        } else {
+            console.log('❌ Move Out button NOT found');
+        }
+    } else {
+        console.log('❌ Move Out action row NOT found');
     }
     
-    // Hide: Add property form if open
-    const addPropertyForm = document.getElementById('addPropertyForm');
-    if (addPropertyForm) addPropertyForm.style.display = 'none';
-    
-    // Hide: Properties list container
-    const propertiesList = document.getElementById('propertiesList');
-    if (propertiesList) propertiesList.style.display = 'none';
-    
-    // Show: Property navigation tabs
-    const propNav = document.getElementById('propertyNavigation');
-    if (propNav) {
-        propNav.style.display = 'flex';
-        console.log('🔍 Property navigation shown');
-    }
-    
-    // Show: Tenants tab content
-    const tenantsTab = document.getElementById('tenants');
-    if (tenantsTab) {
-        tenantsTab.classList.add('active');
-        tenantsTab.style.display = 'block';
-    }
-    
-    // Show: Property header in tenants tab with property name
-    const tenantsPropertyHeader = document.getElementById('tenantsPropertyHeader');
-    if (tenantsPropertyHeader) {
-        tenantsPropertyHeader.style.display = 'block';
-        document.getElementById('tenantsPropertyName').textContent = property.name;
-        document.getElementById('tenantsPropertyAddress').textContent = property.address;
-    }
-    
-    // Show: Back button
-    const tenantsBackButton = document.getElementById('tenantsBackButton');
-    if (tenantsBackButton) tenantsBackButton.style.display = 'block';
-    
-    // Update: Add New Tenant button with property name
-    const tenantToggleBtn = document.getElementById('tenantToggleBtn');
-    if (tenantToggleBtn) {
-        tenantToggleBtn.textContent = `➕ Add New Tenant - ${property.name}`;
-        tenantToggleBtn.style.display = 'inline-flex';
-    }
-    
-    // Keep: Add tenant form COLLAPSED by default
-    const tenantFormCollapsible = document.getElementById('tenantFormCollapsible');
-    if (tenantFormCollapsible) {
-        tenantFormCollapsible.style.maxHeight = '0';
-        tenantFormCollapsible.style.opacity = '0';
-        tenantFormCollapsible.classList.add('collapsed');
-    }
-    
-    // Show: Tenants list
-    const tenantsList = document.getElementById('tenantsList');
-    if (tenantsList) tenantsList.style.display = 'block';
-    
-    // Hide: Properties tab content itself
-    const propertiesTab = document.getElementById('property');
-    if (propertiesTab) {
-        propertiesTab.classList.remove('active');
-        propertiesTab.style.display = 'none';
+    if (queryActionRow) {
+        console.log('🔍 Query action row found:', queryActionRow);
+        queryActionRow.classList.remove('hidden');
+        queryActionRow.style.display = 'flex';
+        
+        // Check if the button exists and is visible
+        const queryButton = document.getElementById('queryToggleBtn');
+        if (queryButton) {
+            console.log('✅ Query button found:', queryButton);
+            console.log('🔍 Button text:', queryButton.textContent);
+            console.log('🔍 Button display:', window.getComputedStyle(queryButton).display);
+            console.log('🔍 Button visibility:', window.getComputedStyle(queryButton).visibility);
+        } else {
+            console.log('❌ Query button NOT found');
+        }
+    } else {
+        console.log('❌ Query action row NOT found');
     }
     
     // Update all other tabs to show only data for selected property
     renderAllEntries();
     updateTenantSelects();
-    updateSummary();
+    
+    showNotification(`Now managing: ${property ? property.name : 'Property'}`);
     
     // Update unit dropdown for new tenant form
     populateUnitDropdown();
+    
+    // Switch to tenants tab after selecting property
+    const tenantsTab = document.querySelector('#propertyNavigation button[onclick*="tenants"]');
+    if (tenantsTab) {
+        showTab('tenants', tenantsTab);
+    }
 }
 
 function backToProperties() {
     data.selectedPropertyId = null;
     saveData();
     
-    // === TOGGLE VISIBILITY ===
-    // Show: Property cards
-    const propertyCards = document.querySelectorAll('.property-card');
-    propertyCards.forEach(card => card.style.display = 'block');
+    // Hide property management navigation
+    document.getElementById('propertyNavigation').style.display = 'none';
     
-    // Show: Property title bar
-    const propertyHeaderCard = document.getElementById('propertyHeaderCard');
-    if (propertyHeaderCard) propertyHeaderCard.style.display = 'block';
-    
-    // Show: Add property button (reset text)
-    const addPropertyBtn = document.querySelector('#propertyHeaderCard .btn-primary');
-    if (addPropertyBtn) addPropertyBtn.style.display = 'inline-flex';
-    
-    // Show: Properties list container
-    const propertiesList = document.getElementById('propertiesList');
-    if (propertiesList) propertiesList.style.display = 'block';
-    
-    // Hide: Property navigation tabs
-    const propNav = document.getElementById('propertyNavigation');
-    if (propNav) {
-        propNav.style.display = 'none';
-    }
-    
-    // Hide: Tenants tab
-    const tenantsTab = document.getElementById('tenants');
-    if (tenantsTab) {
-        tenantsTab.classList.remove('active');
-        tenantsTab.style.display = 'none';
-    }
-    
-    // Hide: Property header in tenants tab
-    const tenantsPropertyHeader = document.getElementById('tenantsPropertyHeader');
-    if (tenantsPropertyHeader) tenantsPropertyHeader.style.display = 'none';
-    
-    // Hide: Back button
-    const tenantsBackButton = document.getElementById('tenantsBackButton');
-    if (tenantsBackButton) tenantsBackButton.style.display = 'none';
-    
-    // Reset: Add New Tenant button text
-    const tenantToggleBtn = document.getElementById('tenantToggleBtn');
-    if (tenantToggleBtn) {
-        tenantToggleBtn.textContent = '➕ Add New Tenant';
-        tenantToggleBtn.style.display = 'none';
-    }
-    
-    // Collapse: Add tenant form
-    const tenantFormCollapsible = document.getElementById('tenantFormCollapsible');
-    if (tenantFormCollapsible) {
-        tenantFormCollapsible.style.maxHeight = '0';
-        tenantFormCollapsible.style.opacity = '0';
-        tenantFormCollapsible.classList.add('collapsed');
-    }
-    
-    // Hide: Tenants list
-    const tenantsList = document.getElementById('tenantsList');
-    if (tenantsList) tenantsList.style.display = 'none';
-    
-    // Hide all property management tabs
-    const propertyTabs = ['tenants', 'monthly', 'expenses', 'moveouts', 'queries', 'summary'];
-    propertyTabs.forEach(tabId => {
-        const tab = document.getElementById(tabId);
-        if (tab) {
-            tab.classList.remove('active');
-            tab.style.display = 'none';
-        }
-    });
-    
-    // Hide action buttons in all tabs
+    // Hide action buttons rows in all property management tabs
     const actionRows = document.querySelectorAll('.action-buttons-row');
     actionRows.forEach(row => {
-        if (row) row.style.display = 'none';
+        row.classList.add('hidden');
     });
     
-    // Show: Properties tab content
-    const propertiesTab = document.getElementById('property');
-    if (propertiesTab) {
-        propertiesTab.classList.add('active');
-        propertiesTab.style.display = 'block';
-    }
-    
-    // Re-render properties list
-    renderProperties();
+    showNotification('Back to Properties');
 }
 
 function renderProperties() {
@@ -1117,10 +970,8 @@ function renderProperties() {
     }
     
     console.log('🔍 Rendering properties list');
-    // Convert selectedPropertyId to number for consistent comparison
-    const currentSelectedId = data.selectedPropertyId ? parseInt(data.selectedPropertyId, 10) : null;
     container.innerHTML = data.properties.map(property => `
-        <div class="property-item ${currentSelectedId === property.id ? 'selected' : ''}" onclick="selectProperty('${property.id}')">
+        <div class="property-item ${data.selectedPropertyId === property.id ? 'selected' : ''}" onclick="selectProperty('${property.id}')">
             <div class="property-info">
                 <div class="property-name">${property.name}</div>
                 <div class="property-details">
@@ -1227,22 +1078,14 @@ function showTab(tabName, buttonElement) {
     console.log('🔍 showTab called with tabName:', tabName);
     console.log('🔍 buttonElement:', buttonElement);
     
-    // Hide all tabs by removing active class
-    const allTabs = document.querySelectorAll('.tab-content');
-    allTabs.forEach(tab => {
-        if (tab) {
-            tab.classList.remove('active');
-            tab.classList.remove('sliding-in');
-            tab.style.display = 'none';
-        }
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
     });
     
     // Remove active class from all buttons in both navigations
-    const allButtons = document.querySelectorAll('.tab-button');
-    allButtons.forEach(btn => {
-        if (btn) {
-            btn.classList.remove('active');
-        }
+    document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('active');
     });
     
     // Add active class to clicked button (if provided)
@@ -1250,91 +1093,9 @@ function showTab(tabName, buttonElement) {
         buttonElement.classList.add('active');
     }
     
-    // Show the selected tab content
-    const selectedTab = document.getElementById(tabName);
-    if (selectedTab) {
-        selectedTab.classList.add('active');
-        selectedTab.style.display = 'block';
-    }
-    
     // Update specific tab content
     if (tabName === 'property') {
         console.log('🔍 Activating PROPERTY tab');
-        console.log('🔍 Property cards found:', document.querySelectorAll('.property-card').length);
-        console.log('🔍 Property header card found:', !!document.getElementById('propertyHeaderCard'));
-        console.log('🔍 Property navigation found:', !!document.getElementById('propertyNavigation'));
-        
-        // === TOGGLE VISIBILITY FOR PROPERTIES TAB ===
-        // Show: Property cards
-        const propertyCards = document.querySelectorAll('.property-card');
-        console.log('🔍 Setting property cards display to block');
-        propertyCards.forEach(card => {
-            card.style.display = 'block';
-            console.log('🔍 Property card display set to:', card.style.display);
-        });
-        
-        // Show: Property title bar
-        const propertyHeaderCard = document.getElementById('propertyHeaderCard');
-        if (propertyHeaderCard) {
-            console.log('🔍 Setting property header card display to block');
-            propertyHeaderCard.style.display = 'block';
-        } else {
-            console.log('❌ Property header card NOT found');
-        }
-        
-        // Show: Add property button
-        const addPropertyBtn = document.querySelector('#propertyHeaderCard .btn-primary');
-        if (addPropertyBtn) {
-            console.log('🔍 Setting add property button display to inline-flex');
-            addPropertyBtn.style.display = 'inline-flex';
-        } else {
-            console.log('❌ Add property button NOT found');
-        }
-        
-        // Hide: Property navigation tabs
-        const propNav = document.getElementById('propertyNavigation');
-        if (propNav) {
-            console.log('🔍 Hiding property navigation');
-            propNav.style.display = 'none';
-        }
-        
-        // Hide: All property management tabs
-        const propertyTabs = ['tenants', 'monthly', 'expenses', 'moveouts', 'queries', 'summary'];
-        propertyTabs.forEach(tabId => {
-            const tab = document.getElementById(tabId);
-            if (tab) {
-                console.log(`🔍 Hiding tab: ${tabId}`);
-                tab.classList.remove('active');
-                tab.style.display = 'none';
-            }
-        });
-        
-        // Hide: Property header in tenants tab
-        const tenantsPropertyHeader = document.getElementById('tenantsPropertyHeader');
-        if (tenantsPropertyHeader) tenantsPropertyHeader.style.display = 'none';
-        
-        // Hide: Back buttons
-        const backButtons = ['tenantsBackButton', 'monthlyBackButton', 'expensesBackButton', 'moveoutsBackButton', 'queriesBackButton'];
-        backButtons.forEach(btnId => {
-            const btn = document.getElementById(btnId);
-            if (btn) btn.style.display = 'none';
-        });
-        
-        // Hide: Add tenant form and button
-        const tenantToggleBtn = document.getElementById('tenantToggleBtn');
-        if (tenantToggleBtn) tenantToggleBtn.style.display = 'none';
-        
-        const tenantFormCollapsible = document.getElementById('tenantFormCollapsible');
-        if (tenantFormCollapsible) {
-            tenantFormCollapsible.style.maxHeight = '0';
-            tenantFormCollapsible.style.opacity = '0';
-            tenantFormCollapsible.classList.add('collapsed');
-        }
-        
-        // Hide: Tenants list
-        const tenantsList = document.getElementById('tenantsList');
-        if (tenantsList) tenantsList.style.display = 'none';
-        
         renderProperties();
     } else if (tabName === 'tenants') {
         console.log('🔍 Activating TENANTS tab');
@@ -1348,6 +1109,51 @@ function showTab(tabName, buttonElement) {
     } else if (tabName === 'summary') {
         console.log('🔍 Activating SUMMARY tab');
         updateSummary();
+        
+        // CRITICAL: Show the action buttons row for Summary tab
+        const summaryActionRow = document.querySelector('#summary .action-buttons-row');
+        console.log('🔍 Looking for Summary action row:', summaryActionRow);
+        
+        if (summaryActionRow) {
+            console.log('🔍 Summary action row classes before:', summaryActionRow.className);
+            summaryActionRow.classList.remove('hidden');
+            console.log('🔍 Summary action row classes after:', summaryActionRow.className);
+            console.log('✅ Summary action row unhidden');
+        } else {
+            console.log('❌ Summary action row NOT found');
+        }
+        
+        // Force show all summary content with simple approach
+        const summaryTab = document.getElementById('summary');
+        if (summaryTab) {
+            summaryTab.style.display = 'block';
+            summaryTab.style.visibility = 'visible';
+            summaryTab.style.opacity = '1';
+            summaryTab.style.position = 'static';
+            console.log('✅ Simple Summary tab visibility applied');
+        }
+        
+        // Show summary cards specifically
+        const summaryCards = document.getElementById('summaryCards');
+        if (summaryCards) {
+            summaryCards.style.display = 'grid !important';
+            summaryCards.style.visibility = 'visible !important';
+            summaryCards.style.opacity = '1 !important';
+            summaryCards.style.height = 'auto !important';
+            console.log('✅ Forced summary cards visibility');
+        }
+        
+        // Show form cards
+        const formCards = summaryTab?.querySelectorAll('.form-card');
+        if (formCards) {
+            formCards.forEach((card, index) => {
+                card.style.display = 'block !important';
+                card.style.visibility = 'visible !important';
+                card.style.opacity = '1 !important';
+                console.log(`✅ Forced form card ${index} visibility`);
+            });
+        }
+        
     } else if (tabName === 'backup') {
         updateBackupInfo();
     }
@@ -1355,51 +1161,27 @@ function showTab(tabName, buttonElement) {
 
 // Initialize navigation state
 function initializeNavigation() {
-    // Don't clear selectedPropertyId here - let the loaded data persist
-    // The user's actual data (including selectedPropertyId) was already loaded in loadData()
+    // Always start with Properties page for all users (fresh login)
+    // Clear any previously selected property to ensure clean start
+    data.selectedPropertyId = null;
+    // Don't save here - let the user's actual data persist
     
-    // Hide property navigation tabs by default (only show when property is selected)
+    // Show property navigation (hidden by default)
     const propertyNav = document.getElementById('propertyNavigation');
     if (propertyNav) {
         propertyNav.style.display = 'none';
     }
     
-    // Hide all property management tabs (tenants, monthly, expenses, etc.)
-    const propertyTabs = ['tenants', 'monthly', 'expenses', 'moveouts', 'queries', 'summary'];
-    propertyTabs.forEach(tabId => {
-        const tab = document.getElementById(tabId);
-        if (tab) {
-            tab.classList.remove('active');
-            tab.style.display = 'none';
-        }
-    });
-    
-    // Hide inline back buttons in all property management tabs
+    // Hide inline back buttons in all property management tabs (check if they exist)
     const backButtons = ['tenantsBackButton', 'monthlyBackButton', 'expensesBackButton', 'moveoutsBackButton', 'queriesBackButton'];
     backButtons.forEach(btnId => {
         const btn = document.getElementById(btnId);
         if (btn) {
             btn.style.display = 'none';
-            btn.classList.remove('visible');
         }
     });
     
-    // Hide property header in tenants tab
-    const propertyHeader = document.getElementById('tenantsPropertyHeader');
-    if (propertyHeader) {
-        propertyHeader.style.display = 'none';
-        propertyHeader.classList.remove('visible');
-    }
-    
-    // Collapse the add tenant form
-    const tenantFormCollapsible = document.getElementById('tenantFormCollapsible');
-    if (tenantFormCollapsible) {
-        tenantFormCollapsible.style.maxHeight = '0';
-        tenantFormCollapsible.style.opacity = '0';
-        tenantFormCollapsible.classList.add('collapsed');
-    }
-    
-    // Show the properties tab content by default
+    // Show the properties tab content
     showTab('property');
 }
 
@@ -2762,69 +2544,17 @@ function addMoveOut() {
 // ===== RENDER FUNCTIONS =====
 function renderAllEntries() {
     renderProperties();
-    
-    // Only render property-specific data if a property is explicitly selected by user
-    // Don't auto-show tabs on initial load - user must click a property card first
-    const propertyNav = document.getElementById('propertyNavigation');
-    const isPropertyTabActive = propertyNav && propertyNav.style.display !== 'none';
-    
-    if (data.selectedPropertyId && isPropertyTabActive) {
-        renderTenants();
-        renderMonthly();
-        renderExpenses();
-        renderMoveOuts2();
-        renderQueries();
-        updateSummary();
-    } else {
-        // Show empty states for all property-specific views
-        const tenantsList = document.getElementById('tenantsList');
-        if (tenantsList) {
-            tenantsList.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-icon">🏢</div>
-                    <div class="empty-state-text">No property selected</div>
-                    <div class="empty-state-subtext">Select a property to view tenants</div>
-                </div>
-            `;
-        }
-        
-        const monthlyList = document.getElementById('monthlyList');
-        if (monthlyList) {
-            monthlyList.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-icon">📅</div>
-                    <div class="empty-state-text">No property selected</div>
-                    <div class="empty-state-subtext">Select a property to view monthly records</div>
-                </div>
-            `;
-        }
-        
-        const expensesList = document.getElementById('expensesList');
-        if (expensesList) {
-            expensesList.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-icon">💸</div>
-                    <div class="empty-state-text">No property selected</div>
-                    <div class="empty-state-subtext">Select a property to view expenses</div>
-                </div>
-            `;
-        }
-    }
+    renderTenants();
+    renderMonthly();
+    renderExpenses();
+    renderMoveOuts2();
+    renderQueries();
 }
 
 function renderTenants() {
-    console.log('🔍 renderTenants() called');
-    console.log('🔍 data.selectedPropertyId:', data.selectedPropertyId);
-    console.log('🔍 data.properties:', data.properties);
-    
     const container = document.getElementById('tenantsList');
-    if (!container) {
-        console.log('❌ tenantsList container not found');
-        return;
-    }
     
     if (!data.selectedPropertyId) {
-        console.log('🔍 No property selected - showing empty state');
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">🏢</div>
@@ -2836,10 +2566,7 @@ function renderTenants() {
     }
     
     const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
-    console.log('🔍 selectedProperty:', selectedProperty);
-    
     if (!selectedProperty) {
-        console.log('❌ Selected property not found');
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">🏢</div>
@@ -2850,12 +2577,9 @@ function renderTenants() {
         return;
     }
     
-    console.log('🔍 selectedProperty.tenants:', selectedProperty.tenants);
     const propertyTenants = selectedProperty.tenants || [];
-    console.log('🔍 propertyTenants count:', propertyTenants.length);
     
     if (!propertyTenants || propertyTenants.length === 0) {
-        console.log('🔍 No tenants - showing empty state');
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">👥</div>
@@ -2908,23 +2632,18 @@ function renderTenants() {
 }
 
 function renderMonthly() {
-    console.log('🔍 renderMonthly() called');
     const container = document.getElementById('monthlyList');
-    console.log('🔍 monthlyList container found:', !!container);
     
     // Get monthly payments from selected property
     let monthlyPayments = [];
     if (data.selectedPropertyId) {
         const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
-        if (selectedProperty) {
-            console.log('🔍 selectedProperty.monthly:', selectedProperty.monthly);
-            monthlyPayments = selectedProperty.monthly || [];
-            console.log('🔍 monthlyPayments count:', monthlyPayments.length);
+        if (selectedProperty && selectedProperty.monthly) {
+            monthlyPayments = selectedProperty.monthly;
         }
     }
     
     if (!monthlyPayments || monthlyPayments.length === 0) {
-        console.log('🔍 No monthly payments - showing empty state');
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">💰</div>
@@ -2961,13 +2680,12 @@ function renderMonthly() {
 }
 
 function renderExpenses() {
-    console.log('🔍 renderExpenses() called');
-    console.log('🔍 data.selectedPropertyId:', data.selectedPropertyId);
+    console.log('🔍 renderExpenses called');
     const container = document.getElementById('expensesList');
     console.log('🔍 expensesList container found:', !!container);
     
     if (!data.selectedPropertyId) {
-        console.log('🔍 No selected property ID - showing empty state');
+        console.log('🔍 No selected property ID');
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">🏢</div>
@@ -2980,7 +2698,7 @@ function renderExpenses() {
     
     const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
     console.log('🔍 Selected property:', selectedProperty?.name);
-    console.log('🔍 Property expenses:', selectedProperty?.expenses);
+    console.log('🔍 Property expenses:', selectedProperty?.expenses?.length || 0);
     
     if (!selectedProperty || !selectedProperty.expenses || selectedProperty.expenses.length === 0) {
         console.log('🔍 No expenses found - showing empty state');
@@ -4452,47 +4170,6 @@ function cancelMoveOutEdit() {
 }
 
 // ===== QUERY FUNCTIONS =====
-function populateQueryTenantDropdown() {
-    const tenantSelect = document.getElementById('queryTenant');
-    if (!tenantSelect) return;
-    
-    // Clear existing options except the first placeholder
-    tenantSelect.innerHTML = '<option value="">Select tenant...</option>';
-    
-    if (!data.selectedPropertyId) {
-        return;
-    }
-    
-    const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
-    if (!selectedProperty) {
-        return;
-    }
-    
-    const propertyTenants = selectedProperty.tenants || [];
-    
-    // Add general option first
-    const generalOption = document.createElement('option');
-    generalOption.value = 'general';
-    generalOption.textContent = 'General (not tenant-specific)';
-    tenantSelect.appendChild(generalOption);
-    
-    // Add tenant options
-    propertyTenants.forEach(tenant => {
-        const option = document.createElement('option');
-        option.value = tenant.id;
-        option.textContent = `${tenant.name} - Unit ${tenant.unit}`;
-        tenantSelect.appendChild(option);
-    });
-    
-    if (tenantSelect.options.length === 1) {
-        const option = document.createElement('option');
-        option.value = "";
-        option.textContent = "No tenants available";
-        option.disabled = true;
-        tenantSelect.appendChild(option);
-    }
-}
-
 function addQuery() {
     // Validate that a property is selected
     if (!data.selectedPropertyId) {
@@ -4564,9 +4241,6 @@ function addQuery() {
 function renderQueries() {
     const container = document.getElementById('queriesList');
     if (!container) return;
-    
-    // Populate tenant dropdown first
-    populateQueryTenantDropdown();
     
     // Get queries from selected property
     let queries = [];
@@ -5087,8 +4761,6 @@ window.backToProperties = backToProperties;
 window.selectProperty = selectProperty;
 window.toggleTenantForm = toggleTenantForm;
 window.toggleMonthlyForm = toggleMonthlyForm;
-window.hideSplash = hideSplash;
-window.showTab = showTab;
 window.toggleExpenseForm = toggleExpenseForm;
 window.showUpdatePrompt = showUpdatePrompt;
 window.dismissUpdate = dismissUpdate;

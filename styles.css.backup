@@ -386,15 +386,6 @@ input:focus, textarea:focus, select:focus {
     display: none;
 }
 
-/* ===== TAB CONTENT - NO ANIMATION ===== */
-.tab-content {
-    display: none;
-}
-
-.tab-content.active {
-    display: block;
-}
-
 .tab-button {
     flex: 1;
     min-width: 120px;
@@ -406,13 +397,19 @@ input:focus, textarea:focus, select:focus {
     font-weight: 600;
     color: #2d3748;
     cursor: pointer;
+    transition: all 0.3s ease;
     white-space: nowrap;
     box-shadow: 4px 4px 8px #c2c8d0, -4px -4px 8px #ffffff;
 }
 
 .tab-button.active {
     background: #d1d9e6;
-    box-shadow: inset 2px 2px 5px #bec4cb, inset -2px -2px 5px #f0f5fa;
+    box-shadow: 4px 4px 8px #c2c8d0, -4px -4px 8px #ffffff;
+}
+
+.tab-button:hover:not(.active) {
+    background: #d6dce4;
+    transform: translateY(-1px);
 }
 
 /* ===== CONTENT AREA ===== */

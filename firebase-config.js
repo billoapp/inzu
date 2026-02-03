@@ -1,15 +1,6 @@
-// 🚨 SECURITY ALERT: API key was exposed in public repository!
-// Instructions:
-// 1. Go to Firebase Console → Project Settings → API Keys
-// 2. Delete the exposed key: AIzaSyAsKjij9SsSJLsUAuJ5DrkCsBwz8GEy9ZU
-// 3. Create a new API key with restrictions:
-//    - Application restriction: Your app (inzu-home)
-//    - API restrictions: Only enable Firebase products you need
-// 4. Update the apiKey below with the new key
-
-// firebase-config.js
+// firebase-config.js - Firebase configuration
 export const firebaseConfig = {
-  apiKey: "REVOKED-EXPOSED-KEY",
+  apiKey: "AIzaSyC2ed7p5iIOcRNvOErrPcdSoJYrXH4vZIc",
   authDomain: "inzu-home.firebaseapp.com",
   databaseURL: "https://inzu-home-default-rtdb.asia-southeast1.firebasedatabase.app/",
   projectId: "inzu-home",
