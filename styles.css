@@ -1863,7 +1863,8 @@ button:disabled {
     font-size: 1.1rem;
     margin-bottom: 40px;
     opacity: 0.8;
-    max-width: 400px;
+    text-align: center;
+    max-width: 90%;
     line-height: 1.5;
     color: #2d3748;
 }
@@ -2170,6 +2171,54 @@ overflow: hidden;
     }
 }
 
+/* ===== BANNER STYLES ===== */
+.banner-container {
+    width: 100%;
+    margin: 0 0 20px 0;
+    padding: 0 8px;
+    border-radius: 0;
+    overflow: hidden;
+    box-shadow: none;
+    position: relative;
+}
+
+.banner-image {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 0;
+    margin: 0;
+    padding: 0;
+}
+
+/* Responsive for banner */
+@media (max-width: 768px) {
+    .banner-container {
+        width: 100%;
+        margin: 0 0 16px 0;
+        padding: 0 8px;
+    }
+    
+    .banner-image {
+        border-radius: 0;
+    }
+}
+
+/* PWA-specific banner rules */
+@media (max-width: 768px) and (display-mode: standalone), (max-width: 768px) and (display-mode: fullscreen) {
+    .banner-container {
+        width: 100%;
+        margin: 0 0 16px 0;
+        padding: 0 8px;
+    }
+    
+    .banner-image {
+        width: 100% !important;
+        max-width: 100% !important;
+        border-radius: 0;
+    }
+}
+
 /* ===== ACTION BUTTONS ROW ===== */
 .action-buttons-row {
     display: flex;
@@ -2366,9 +2415,5 @@ overflow: hidden;
         flex-direction: column;
         gap: 12px;
         align-items: stretch;
-    }
-    
-    .add-buttons-container {
-        justify-content: center;
     }
 }

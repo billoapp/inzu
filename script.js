@@ -876,30 +876,89 @@ function applyUpdate() {
     }
 }
 
+// ===== LEGAL FUNCTIONS =====
+function showTermsOfService() {
+    document.getElementById('termsOverlay').style.display = 'flex';
+}
+
+function showPrivacyPolicy() {
+    document.getElementById('privacyOverlay').style.display = 'flex';
+}
+
+function showDataInfo() {
+    document.getElementById('dataInfoOverlay').style.display = 'flex';
+}
+
+function showDeleteAccount() {
+    document.getElementById('deleteAccountOverlay').style.display = 'flex';
+}
+
+function closeLegalOverlay(overlayId) {
+    document.getElementById(overlayId).style.display = 'none';
+}
+
+function confirmDeleteAccount() {
+    if (confirm('Are you absolutely sure? This will permanently delete ALL your data and cannot be undone.')) {
+        // Delete all user data from Firebase
+        const user = auth.currentUser;
+        if (user) {
+            // Delete user data from Firebase
+            firebase.database().ref('users/' + user.uid).remove()
+                .then(() => {
+                    // Delete user account
+                    user.delete()
+                        .then(() => {
+                            // Clear local storage
+                            localStorage.clear();
+                            // Redirect to login or show success message
+                            alert('Your account and all data have been permanently deleted.');
+                            window.location.reload();
+                        })
+                        .catch((error) => {
+                            console.error('Error deleting account:', error);
+                            alert('Error deleting account. Please contact support.');
+                        });
+                })
+                .catch((error) => {
+                    console.error('Error deleting user data:', error);
+                    alert('Error deleting data. Please contact support.');
+                });
+        }
+    }
+}
+
+// Expose legal functions to global scope
+window.showTermsOfService = showTermsOfService;
+window.showPrivacyPolicy = showPrivacyPolicy;
+window.showDataInfo = showDataInfo;
+window.showDeleteAccount = showDeleteAccount;
+window.closeLegalOverlay = closeLegalOverlay;
+window.confirmDeleteAccount = confirmDeleteAccount;
+
 // ===== COLOR GRADIENT FUNCTIONS =====
 function getPropertyGradient(propertyId) {
-    // Array of dark contrasting gradients with black tones - no white tints
+    // Array of dark colorful gradients - no pure black, rich colors maintained
     const gradients = [
-        'linear-gradient(135deg, #2d1b69 0%, #0f0c29 100%)', // Deep Purple-Black
-        'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)', // Midnight Blue
-        'linear-gradient(135deg, #0f3443 0%, #34e89e 100%)', // Dark Teal to Green
-        'linear-gradient(135deg, #2c003e 0%, #512b58 100%)', // Dark Purple
-        'linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)', // Deep Blue
-        'linear-gradient(135deg, #141e30 0%, #243b55 100%)', // Dark Navy
-        'linear-gradient(135deg, #0f2027 0%, #203a43 100%)', // Dark Cyan
-        'linear-gradient(135deg, #2b1b17 0%, #5c3317 100%)', // Dark Brown
-        'linear-gradient(135deg, #1a1a1a 0%, #434343 100%)', // Dark Gray
-        'linear-gradient(135deg, #0d1117 0%, #161b22 100%)', // GitHub Dark
-        'linear-gradient(135deg, #1e3a5f 0%, #2c5f2d 100%)', // Forest Dark
-        'linear-gradient(135deg, #2d1b00 0%, #5d4e37 100%)', // Dark Bronze
-        'linear-gradient(135deg, #1a0033 0%, #330867 100%)', // Deep Violet
-        'linear-gradient(135deg, #0d0221 0%, #1a1a3e 100%)', // Space Dark
-        'linear-gradient(135deg, #2e1a47 0%, #4a2c4e 100%)', // Dark Plum
-        'linear-gradient(135deg, #1a2332 0%, #2d4059 100%)', // Slate Dark
-        'linear-gradient(135deg, #0f0f0f 0%, #363636 100%)', // Pure Black
-        'linear-gradient(135deg, #1a237e 0%, #283593 100%)', // Indigo Dark
-        'linear-gradient(135deg, #263238 0%, #37474f 100%)', // Blue Gray Dark
-        'linear-gradient(135deg, #1b1b1b 0%, #3e2723 100%)'  // Dark Espresso
+        'linear-gradient(135deg, #2d1b69 0%, #4a148c 100%)', // Deep Purple
+        'linear-gradient(135deg, #1a237e 0%, #283593 100%)', // Indigo Blue
+        'linear-gradient(135deg, #0d47a1 0%, #1565c0 100%)', // Royal Blue
+        'linear-gradient(135deg, #004d40 0%, #00695c 100%)', // Deep Teal
+        'linear-gradient(135deg, #1b5e20 0%, #2e7d32 100%)', // Forest Green
+        'linear-gradient(135deg, #e65100 0%, #ef6c00 100%)', // Deep Orange
+        'linear-gradient(135deg, #bf360c 0%, #d84315 100%)', // Deep Red
+        'linear-gradient(135deg, #4a148c 0%, #6a1b9a 100%)', // Purple Violet
+        'linear-gradient(135deg, #311b92 0%, #512da8 100%)', // Deep Violet
+        'linear-gradient(135deg, #1a237e 0%, #3949ab 100%)', // Midnight Blue
+        'linear-gradient(135deg, #006064 0%, #00838f 100%)', // Dark Cyan
+        'linear-gradient(135deg, #2e7d32 0%, #43a047 100%)', // Dark Green
+        'linear-gradient(135deg, #f57c00 0%, #fb8c00 100%)', // Dark Amber
+        'linear-gradient(135deg, #c62828 0%, #d32f2f 100%)', // Dark Red
+        'linear-gradient(135deg, #ad1457 0%, #c2185b 100%)', // Dark Pink
+        'linear-gradient(135deg, #4527a0 0%, #5e35b1 100%)', // Deep Purple
+        'linear-gradient(135deg, #01579b 0%, #0277bd 100%)', // Ocean Blue
+        'linear-gradient(135deg, #004d40 0%, #00796b 100%)', // Sea Green
+        'linear-gradient(135deg, #e64a19 0%, #ff5722 100%)', // Deep Coral
+        'linear-gradient(135deg, #6a1b9a 0%, #8e24aa 100%)'  // Purple Magenta
     ];
     
     // Use property ID to consistently assign the same gradient to each property

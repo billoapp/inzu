@@ -73,16 +73,6 @@
                 </div>
                 <ul class="slideout-menu">
                     <li>
-                        <button onclick="showTab('summary', this); closeUserMenu();">
-                            <span>📊</span> Dashboard
-                        </button>
-                    </li>
-                    <li>
-                        <button onclick="showBackupSection(); closeUserMenu();">
-                            <span>☁️</span> Backup & Sync
-                        </button>
-                    </li>
-                    <li>
                         <button onclick="exportData(); closeUserMenu();">
                             <span>📤</span> Export JSON
                         </button>
@@ -92,10 +82,31 @@
                             <span>📊</span> Export CSV
                         </button>
                     </li>
+                    <li class="menu-divider"></li>
                     <li>
-                        <button onclick="importData(); closeUserMenu();">
-                            <span>📥</span> Import Data
+                        <button onclick="showTermsOfService(); closeUserMenu();">
+                            <span>📋</span> Terms of Service
                         </button>
+                    </li>
+                    <li>
+                        <button onclick="showPrivacyPolicy(); closeUserMenu();">
+                            <span>🔒</span> Privacy Policy
+                        </button>
+                    </li>
+                    <li>
+                        <button onclick="showDataInfo(); closeUserMenu();">
+                            <span>📊</span> Data Collection
+                        </button>
+                    </li>
+                    <li>
+                        <button onclick="showDeleteAccount(); closeUserMenu();" class="menu-danger">
+                            <span>🗑️</span> Delete Account
+                        </button>
+                    </li>
+                    <li class="menu-divider"></li>
+                    <li class="menu-disclaimer">
+                        <small>No liability for data loss or inaccuracies.</small><br>
+                        <small>&copy; 2026 Bonga Talk Research Ltd</small>
                     </li>
                     <li>
                         <button class="logout" onclick="logoutUser()">
@@ -116,9 +127,13 @@
         <main class="content-area">
             <!-- Property Tab -->
             <div id="property" class="tab-content active">
+                <!-- Banner Image -->
+                <div class="banner-container">
+                    <img src="banner.jpg" alt="Property Management Banner" class="banner-image">
+                </div>
+                
                 <div class="form-card" id="propertyHeaderCard">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <h3>Properties</h3>
+                    <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 20px;">
                         <button class="btn btn-primary" onclick="showAddPropertyForm()">➕ Add Property</button>
                     </div>
                     
@@ -745,6 +760,232 @@
             <div class="status-indicator">
                 <div class="status-dot" id="statusDot"></div>
                 <span id="statusText">Online</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Legal Overlays -->
+    <!-- Terms of Service Overlay -->
+    <div id="termsOverlay" class="legal-overlay" style="display: none;">
+        <div class="legal-modal">
+            <div class="legal-header">
+                <h2>Terms of Service</h2>
+                <button class="close-btn" onclick="closeLegalOverlay('termsOverlay')">×</button>
+            </div>
+            <div class="legal-content">
+                <h3>1. Acceptance of Terms</h3>
+                <p>By accessing and using the Inzu Rental Management System ("the Service") operated by Bonga Talk Research Ltd ("the Company", "we", "us", or "our"), you agree to be bound by these Terms of Service ("Terms"). If you disagree with any part of these terms, then you may not access the Service.</p>
+                
+                <h3>2. No Liability and Disclaimer</h3>
+                <p><strong>Bonga Talk Research Ltd provides this software "AS IS" without any warranties, express or implied.</strong></p>
+                <p>The Company shall not be liable for any direct, indirect, incidental, special, consequential, or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses, resulting from your use of the Service.</p>
+                <p>Users are solely responsible for backing up their data independently. The Company does not guarantee data integrity, accuracy, or completeness of any information stored in or transmitted through the Service.</p>
+                <p>The Service is provided on an "as available" and "as is" basis. We give no warranty that the Service will be uninterrupted, timely, secure, or error-free.</p>
+                
+                <h3>3. Data Accuracy and User Responsibility</h3>
+                <p>Users are solely responsible for ensuring the accuracy, completeness, and legality of all data entered into the Service. The Company does not verify, endorse, or guarantee the accuracy of any user-provided information.</p>
+                <p>Users must comply with all applicable laws, regulations, and guidelines relating to rental property management in Kenya, including but not limited to the Landlord and Tenant Act, Rent Restriction Act, and any other relevant legislation.</p>
+                <p>Users acknowledge that they are responsible for maintaining the confidentiality of their account credentials and for all activities that occur under their account.</p>
+                
+                <h3>4. Service Availability and Modifications</h3>
+                <p>We reserve the right to modify, suspend, or discontinue the Service at any time without prior notice. We may also impose limits on certain features or restrict your access to parts or all of the Service without notice or liability.</p>
+                <p>The Company may update these Terms from time to time. The most current version will always be available on the Service. Your continued use of the Service after any changes constitutes acceptance of the new Terms.</p>
+                
+                <h3>5. User Conduct and Responsibilities</h3>
+                <p>Users agree not to use the Service for any unlawful purposes or in any way that could damage, disable, or impair the Service. Users must not attempt to gain unauthorized access to the Service, other accounts, computer systems, or networks connected to the Service.</p>
+                <p>Users must comply with all applicable Kenyan laws regarding rental property management, tenant rights, data protection, and financial regulations.</p>
+                <p>Users are responsible for maintaining accurate and complete records as required by Kenyan law, including proper documentation of rental agreements, payment records, and tenant information.</p>
+                
+                <h3>6. Monetization and Commercial Terms</h3>
+                <p>The Service may be monetized through advertising, subscription fees, premium features, or other commercial models. Users acknowledge that they may be required to pay fees for certain features or services in the future.</p>
+                <p>The Company reserves the right to introduce paid features, subscription plans, or advertising at any time. Users will be notified of any material changes to the pricing structure.</p>
+                <p>Users agree to pay all applicable fees and charges incurred through their use of the Service. Failure to pay required fees may result in suspension or termination of access to the Service.</p>
+                
+                <h3>7. Intellectual Property Rights</h3>
+                <p>The Service and its original content, features, and functionality are and will remain the exclusive property of Bonga Talk Research Ltd and its licensors. The Service is protected by copyright, trademark, and other laws.</p>
+                <p>Users may not modify, reproduce, distribute, create derivative works, publicly display, or publicly perform any part of the Service without prior written consent from Bonga Talk Research Ltd.</p>
+                
+                <h3>8. Privacy and Data Protection</h3>
+                <p>Your privacy is important to us. Please review our Privacy Policy, which also governs your use of the Service, to understand our practices regarding the collection, use, and sharing of your data.</p>
+                <p>By using the Service, you consent to the collection and use of information in accordance with our Privacy Policy and the Kenya Data Protection Act, 2019.</p>
+                
+                <h3>9. Termination</h3>
+                <p>We may terminate or suspend your account and bar access to the Service immediately, without prior notice or liability, under our sole discretion, for any reason whatsoever and without limitation.</p>
+                <p>Upon termination, your right to use the Service will cease immediately. All provisions of the Terms which by their nature should survive termination shall survive, including ownership provisions, warranty disclaimers, indemnity, and limitations of liability.</p>
+                
+                <h3>10. Governing Law and Jurisdiction</h3>
+                <p>These Terms shall be interpreted and governed by the laws of the Republic of Kenya, without regard to its conflict of law provisions.</p>
+                <p>Any dispute arising from or relating to these Terms or the Service shall be resolved through negotiation in good faith. If the dispute cannot be resolved through negotiation, it shall be submitted to the courts of Kenya with exclusive jurisdiction.</p>
+                
+                <h3>11. Indemnification</h3>
+                <p>You agree to indemnify and hold Bonga Talk Research Ltd and its directors, employees, and agents harmless from any and all claims, liabilities, damages, losses, and expenses, including without limitation reasonable legal and accounting fees, arising out of or in any way connected with your access to or use of the Service.</p>
+                
+                <h3>12. Limitation of Liability</h3>
+                <p>In no event shall Bonga Talk Research Ltd, its directors, employees, partners, agents, suppliers, or affiliates be liable for any indirect, incidental, special, consequential, or punitive damages, including loss of profits, data, use, or other intangible losses, resulting from your use of the Service.</p>
+                <p>Our total liability to you for any cause of action whatsoever, and regardless of the form of the action, will at all times be limited to the amount paid, if any, by you to us for the Service during the month preceding the claim.</p>
+                
+                <h3>13. Severability</h3>
+                <p>If any provision of these Terms is found to be unenforceable or invalid, that provision will be limited or eliminated to the minimum extent necessary so that the remaining Terms will remain in full force and effect.</p>
+                
+                <h3>14. Entire Agreement</h3>
+                <p>These Terms constitute the entire agreement between you and Bonga Talk Research Ltd regarding your use of the Service and supersede all prior and contemporaneous written or oral agreements between you and Bonga Talk Research Ltd.</p>
+                
+                <h3>15. Contact Information</h3>
+                <p>If you have any questions about these Terms, please contact us at:</p>
+                <p>Bonga Talk Research Ltd<br>
+                P.O. Box 1035 - 00500, Kakamega<br>
+                Email: billo.mobile.app@gmail.com</p>
+                
+                <p><strong>Effective Date: February 2026</strong></p>
+                <p><strong>Last Updated: February 2026</strong></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Privacy Policy Overlay -->
+    <div id="privacyOverlay" class="legal-overlay" style="display: none;">
+        <div class="legal-modal">
+            <div class="legal-header">
+                <h2>Privacy Policy</h2>
+                <button class="close-btn" onclick="closeLegalOverlay('privacyOverlay')">×</button>
+            </div>
+            <div class="legal-content">
+                <h3>1. Data Collection</h3>
+                <p>We collect information necessary for rental property management including:</p>
+                <ul>
+                    <li>Property details (address, type, units)</li>
+                    <li>Tenant information (name, contact details, rent amounts)</li>
+                    <li>Payment records and financial data</li>
+                    <li>Expense tracking information</li>
+                    <li>Documents uploaded by users</li>
+                </ul>
+                
+                <h3>2. Data Protection</h3>
+                <p>We comply with Kenya Data Protection Act, 2019:</p>
+                <ul>
+                    <li>Data is stored securely with encryption</li>
+                    <li>Access is limited to authorized users only</li>
+                    <li>Data is processed lawfully and transparently</li>
+                </ul>
+                
+                <h3>3. Data Usage</h3>
+                <p>Your data is used solely for:</p>
+                <ul>
+                    <li>Providing the rental management service</li>
+                    <li>Improving our services</li>
+                    <li>Analytics for service optimization</li>
+                </ul>
+                
+                <h3>4. Data Sharing</h3>
+                <p>We do not sell or share your personal data with third parties except as required by law.</p>
+                
+                <h3>5. Your Rights</h3>
+                <p>Under Kenyan law, you have the right to:</p>
+                <ul>
+                    <li>Access your data</li>
+                    <li>Correct inaccurate data</li>
+                    <li>Delete your data</li>
+                    <li>Port your data</li>
+                </ul>
+                
+                <h3>6. Data Retention</h3>
+                <p>We retain data only as long as necessary for service provision or as required by law.</p>
+                
+                <p><strong>Last updated: February 2026</strong></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Information Overlay -->
+    <div id="dataInfoOverlay" class="legal-overlay" style="display: none;">
+        <div class="legal-modal">
+            <div class="legal-header">
+                <h2>Data Collection Information</h2>
+                <button class="close-btn" onclick="closeLegalOverlay('dataInfoOverlay')">×</button>
+            </div>
+            <div class="legal-content">
+                <h3>What We Collect</h3>
+                <ul>
+                    <li><strong>Property Data:</strong> Address, type, number of units, descriptions</li>
+                    <li><strong>Tenant Data:</strong> Names, contact information, rent amounts, payment history</li>
+                    <li><strong>Financial Data:</strong> Rent payments, expenses, deposits</li>
+                    <li><strong>Documents:</strong> Lease agreements, ID documents, receipts</li>
+                    <li><strong>Usage Data:</strong> App usage patterns for service improvement</li>
+                </ul>
+                
+                <h3>Why We Collect It</h3>
+                <ul>
+                    <li>To provide rental management functionality</li>
+                    <li>To generate reports and analytics</li>
+                    <li>To improve user experience</li>
+                    <li>To ensure service reliability</li>
+                </ul>
+                
+                <h3>How We Protect It</h3>
+                <ul>
+                    <li>End-to-end encryption</li>
+                    <li>Secure cloud storage</li>
+                    <li>Regular security audits</li>
+                    <li>Limited employee access</li>
+                </ul>
+                
+                <h3>Monetization</h3>
+                <p>This service may be monetized through:</p>
+                <ul>
+                    <li>Targeted advertising based on usage patterns</li>
+                    <li>Premium subscription plans with additional features</li>
+                    <li>Data analytics services (anonymized data only)</li>
+                </ul>
+                
+                <p><strong>Last updated: February 2026</strong></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Account Overlay -->
+    <div id="deleteAccountOverlay" class="legal-overlay" style="display: none;">
+        <div class="legal-modal">
+            <div class="legal-header">
+                <h2>Delete Account & Records</h2>
+                <button class="close-btn" onclick="closeLegalOverlay('deleteAccountOverlay')">×</button>
+            </div>
+            <div class="legal-content">
+                <div class="warning-box">
+                    <h3>⚠️ WARNING: This action is PERMANENT</h3>
+                    <p><strong>This will immediately and permanently delete:</strong></p>
+                    <ul>
+                        <li>Your entire account</li>
+                        <li>All property records</li>
+                        <li>All tenant information</li>
+                        <li>All payment history</li>
+                        <li>All uploaded documents</li>
+                        <li>All expense records</li>
+                    </ul>
+                    <p><strong>This action CANNOT be undone.</strong></p>
+                </div>
+                
+                <h3>Before You Delete</h3>
+                <p>Please ensure you have:</p>
+                <ul>
+                    <li>Downloaded all important data using the Export feature</li>
+                    <li>Backed up documents and records elsewhere</li>
+                    <li>Informed tenants of the data deletion if required</li>
+                </ul>
+                
+                <h3>Data Deletion Process</h3>
+                <p>When you delete your account:</p>
+                <ul>
+                    <li>All data is immediately removed from our servers</li>
+                    <li>Backups are deleted within 30 days</li>
+                    <li>No recovery is possible after deletion</li>
+                </ul>
+                
+                <div class="delete-actions">
+                    <button class="btn btn-secondary" onclick="closeLegalOverlay('deleteAccountOverlay')">Cancel</button>
+                    <button class="btn btn-danger" onclick="confirmDeleteAccount()">Delete Everything Permanently</button>
+                </div>
+                
+                <p><strong>Last updated: February 2026</strong></p>
             </div>
         </div>
     </div>
