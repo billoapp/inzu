@@ -57,6 +57,11 @@ body {
     color: #2d3748;
 }
 
+.btn-warning {
+    background: #e0e5ec;
+    color: #2d3748;
+}
+
 .btn-small {
     padding: 8px 12px;
     font-size: 12px;
@@ -91,6 +96,72 @@ input:focus, textarea:focus, select:focus {
     margin-bottom: 16px;
     box-shadow: 10px 10px 30px #c2c8d0, -10px -10px 30px #ffffff;
     border: none;
+}
+
+/* Entry actions styling with more space from content */
+.entry-actions {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #d1d5db;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+/* ===== CARD HIERARCHY STYLING ===== */
+/* Entry card titles - larger and bold */
+.entry-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #1f2937;
+    margin-bottom: 4px;
+}
+
+/* Entry card amounts - prominent */
+.entry-amount {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #059669;
+}
+
+/* Field labels - bold */
+.field-label {
+    font-weight: 600;
+    color: #374151;
+}
+
+/* Entry details normal text */
+.entry-details > div {
+    font-weight: 400;
+    color: #4b5563;
+    margin-bottom: 2px;
+}
+
+/* Descriptions and notes - italic */
+.tenant-notes,
+.payment-notes,
+.property-description {
+    font-style: italic;
+    color: #6b7280;
+    font-size: 0.9rem;
+    margin-top: 8px;
+    font-weight: 400 !important;
+}
+
+/* Property card titles */
+.property-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #1f2937;
+    margin-bottom: 4px;
+}
+
+/* Property card descriptions */
+.property-description {
+    font-style: italic;
+    color: #6b7280;
+    font-size: 0.9rem;
+    margin-top: 8px;
 }
 
 /* ===== NEUMORPHIC TABS ===== */
@@ -854,6 +925,32 @@ input:focus, textarea:focus, select:focus {
     flex: 1;
 }
 
+/* Red text button (no fill) */
+.btn-text-danger {
+    background: transparent;
+    color: #dc2626;
+    border: none;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 8px 16px;
+    border-radius: 8px;
+    transition: background-color 0.2s ease;
+    text-align: center;
+    width: 100%;
+    margin-top: 16px;
+}
+
+.btn-text-danger:hover {
+    background: rgba(220, 38, 38, 0.1);
+}
+
+/* Disabled button styles */
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed !important;
+}
+
 .btn-full {
     flex: 1;
 }
@@ -956,6 +1053,15 @@ input:focus, textarea:focus, select:focus {
     background: #d6dce4;
 }
 
+.btn-warning {
+    background: #e0e5ec;
+    color: #2d3748;
+}
+
+.btn-warning:hover {
+    background: #d6dce4;
+}
+
 .btn-small {
     padding: 8px 12px;
     font-size: 12px;
@@ -1021,6 +1127,14 @@ input:focus, textarea:focus, select:focus {
     gap: 12px;
     align-items: flex-start;
     margin-top: 8px;
+    position: relative;
+    z-index: 10;
+}
+
+.property-actions .btn {
+    position: relative;
+    z-index: 11;
+    pointer-events: auto;
 }
 
 .property-card {

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Inzu</title>
     <link rel="manifest" href="manifest.json">
-    <link rel="icon" type="image/png" href="icon-512.png">
+    <link rel="icon" type="image/png" href="logo.png">
     <link rel="stylesheet" href="styles.css">
     <script type="module" src="script.js"></script>
 </head>
@@ -13,30 +13,7 @@
     <!-- Splash Screen -->
     <div id="splashContainer" class="splash-container">
         <img src="icon-512.png" alt="Inzu" class="splash-logo">
-        <p class="splash-subtitle">Your complete solution for managing rental properties efficiently and professionally</p>
-        
-        <div class="splash-features">
-            <div class="splash-feature">
-                <div class="splash-feature-icon">👥</div>
-                <div class="splash-feature-title">Tenant Management</div>
-                <div class="splash-feature-desc">Keep track of all your tenants, their details, and rental information in one place</div>
-            </div>
-            <div class="splash-feature">
-                <div class="splash-feature-icon">💰</div>
-                <div class="splash-feature-title">Payment Tracking</div>
-                <div class="splash-feature-desc">Monitor monthly payments, track expenses, and maintain financial records</div>
-            </div>
-            <div class="splash-feature">
-                <div class="splash-feature-icon">📊</div>
-                <div class="splash-feature-title">Smart Reports</div>
-                <div class="splash-feature-desc">Generate comprehensive reports and insights about your rental business</div>
-            </div>
-            <div class="splash-feature">
-                <div class="splash-feature-icon">🔒</div>
-                <div class="splash-feature-title">Secure & Sync</div>
-                <div class="splash-feature-desc">Your data is securely stored and synced across all your devices</div>
-            </div>
-        </div>
+        <p class="splash-subtitle">Keep track of all your tenants, their details, and rental information in one place</p>
         
         <button class="splash-get-started" onclick="hideSplash()">Get Started</button>
     </div>
@@ -44,7 +21,7 @@
     <!-- Auth Container -->
     <div id="authContainer" class="auth-container">
         <div class="auth-card">
-            <img src="icon-512.png" alt="Inzu" style="width: 80px; height: 80px; margin-bottom: 20px; border-radius: 16px;">
+            <img src="logo.png" alt="Inzu" style="width: 80px; height: 80px; margin-bottom: 20px; border-radius: 16px;">
             <p>Secure access to your rental property data</p>
             <button class="google-btn" onclick="loginWithGoogle()">
                 <svg class="google-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -66,7 +43,7 @@
     <div class="app-container">
         <header class="app-header">
             <div class="brand">
-                <img src="icon-512.png" alt="Inzu logo" class="app-logo">
+                <img src="logo.png" alt="Inzu logo" class="app-logo">
             </div>
             <div class="user-menu">
                 <div class="user-avatar" onclick="toggleUserMenu()">
@@ -129,7 +106,7 @@
             </div>
         </div>
 
-        <nav class="tab-navigation" id="propertyNavigation" style="display: flex;">
+        <nav class="tab-navigation" id="propertyNavigation" style="display: none;">
             <button class="tab-button" onclick="showTab('tenants', this)">Tenants</button>
             <button class="tab-button" onclick="showTab('monthly', this)">Monthly</button>
             <button class="tab-button" onclick="showTab('expenses', this)">Expenses</button>
@@ -222,6 +199,10 @@
                                         <option value="mixed">Mixed Use</option>
                                     </select>
                                 </div>
+                                <div class="form-group">
+                                    <label for="editPropertyUnits">Number of Units *</label>
+                                    <input type="number" id="editPropertyUnits" name="propertyUnits" min="1" max="500" placeholder="e.g., 12" required>
+                                </div>
                             </div>
                             <div class="form-group">
                                 <label for="editPropertyDescription">Description</label>
@@ -229,8 +210,9 @@
                             </div>
                             <div class="form-actions">
                                 <button type="button" class="btn btn-secondary" onclick="cancelPropertyEdit()">Cancel</button>
-                                <button type="submit" class="btn btn-primary">Update Property</button>
+                                <button type="submit" class="btn btn-primary" id="updatePropertyBtn" disabled>Update Property</button>
                             </div>
+                            <button type="button" class="btn-text-danger" onclick="event.stopPropagation(); deleteProperty()">Delete Property</button>
                         </form>
                     </div>
                 </div>
@@ -314,6 +296,28 @@
                                     <label for="newWaterBalance">Water Balance (Ksh)</label>
                                     <input type="number" id="newWaterBalance" name="waterBalance" placeholder="0">
                                 </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="newTenantNotes">Notes & References</label>
+                                <textarea id="newTenantNotes" name="tenantNotes" placeholder="Emergency contact, references, special notes..." rows="3" style="width: 100%; padding: 12px 16px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 1rem; font-family: inherit; resize: vertical;"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="newLeaseDocument">Signed Lease Document</label>
+                                <input type="file" id="newLeaseDocument" accept=".pdf,.jpg,.jpeg,.png" multiple capture="environment" style="display: none;">
+                                <div id="newLeaseDocumentButtons" style="display: flex; gap: 8px; margin-bottom: 8px;">
+                                    <button type="button" id="newLeaseUploadBtn" class="btn btn-secondary" onclick="document.getElementById('newLeaseDocument').click()" style="flex: 1;">Upload</button>
+                                </div>
+                                <div id="newLeaseDocumentDisplay" style="margin-top: 8px; font-size: 0.875rem; color: #64748b;"></div>
+                                <small style="color: #64748b; font-size: 0.75rem; margin-top: 4px; display: block;">Upload PDF or image of signed lease. You can upload up to 3 documents. Use camera to scan or file manager to select existing files.</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="newTenantIdDocument">Identification Document</label>
+                                <input type="file" id="newTenantIdDocument" accept=".jpg,.jpeg,.png,.pdf" multiple capture="environment" style="display: none;">
+                                <div id="newIdDocumentButtons" style="display: flex; gap: 8px; margin-bottom: 8px;">
+                                    <button type="button" id="newIdUploadBtn" class="btn btn-secondary" onclick="document.getElementById('newTenantIdDocument').click()" style="flex: 1;">Upload</button>
+                                </div>
+                                <div id="newTenantIdDocumentDisplay" style="margin-top: 8px; font-size: 0.875rem; color: #64748b;"></div>
+                                <small style="color: #64748b; font-size: 0.75rem; margin-top: 4px; display: block;">Upload ID card, passport, or other identification. You can upload multiple files (PDF or images for front/back). Use camera to scan or file manager to select existing files.</small>
                             </div>
                             <div class="form-actions">
                                 <button type="button" class="btn btn-secondary" onclick="toggleTenantForm()">Cancel</button>
@@ -404,8 +408,8 @@
                             <small style="color: #64748b; font-size: 0.75rem; margin-top: 4px; display: block;">Upload ID card, passport, or other identification. You can upload multiple files (PDF or images for front/back). Use camera to scan or file manager to select existing files.</small>
                         </div>
                         <div class="form-actions">
-                            <button type="button" id="tenantCancelBtn" class="btn btn-secondary" style="display: none;">Cancel</button>
-                            <button type="submit" class="btn btn-primary" style="flex: 1;">Save Tenant</button>
+                            <button type="button" id="tenantCancelBtn" class="btn btn-secondary" onclick="cancelTenantEdit()">Cancel</button>
+                            <button type="submit" class="btn btn-primary" id="saveTenantBtn" style="flex: 1;" disabled>Save Tenant</button>
                         </div>
                     </form>
                 </div>
@@ -469,11 +473,47 @@
                             </div>
                             <div class="form-actions">
                                 <button type="button" class="btn btn-secondary" onclick="toggleMonthlyForm()">Cancel</button>
-                                <button type="submit" class="btn btn-success btn-full">Record Payment</button>
+                                <button type="submit" class="btn btn-success btn-full" id="recordPaymentBtn">Record Payment</button>
                             </div>
                         </form>
                     </div>
                 </div>
+
+                <!-- Monthly Edit Overlay -->
+                <div id="monthlyEditOverlay" class="edit-overlay hidden">
+                    <div class="edit-page">
+                        <div class="form-card">
+                            <h3 id="monthlyFormTitle">Record Monthly Payment</h3>
+                            <form id="monthlyEditForm">
+                                <div class="form-group">
+                                    <label for="monthlyTenantEdit">Select Tenant</label>
+                                    <select id="monthlyTenantEdit" name="monthlyTenant" required>
+                                        <option value="">Choose a tenant...</option>
+                                    </select>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="monthlyAmountEdit">Amount (Ksh)</label>
+                                        <input type="number" id="monthlyAmountEdit" name="monthlyAmount" placeholder="50000" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="monthlyDateEdit">Date</label>
+                                        <input type="date" id="monthlyDateEdit" name="monthlyDate" required>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="monthlyNotesEdit">Notes</label>
+                                    <input type="text" id="monthlyNotesEdit" name="monthlyNotes" placeholder="Payment method, etc.">
+                                </div>
+                                <div class="form-actions">
+                                    <button type="button" id="monthlyCancelBtn" class="btn btn-secondary">Cancel</button>
+                                    <button type="submit" class="btn btn-success btn-full">Record Payment</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <!-- End Monthly Edit Overlay -->
 
                 <div class="entries-list" id="monthlyList">
                     <div class="empty-state">
@@ -540,11 +580,56 @@
                             </div>
                             <div class="form-actions">
                                 <button type="button" class="btn btn-secondary" onclick="toggleExpenseForm()">Cancel</button>
-                                <button type="submit" class="btn btn-primary btn-full">Add Expense</button>
+                                <button type="submit" class="btn btn-primary btn-full" id="addExpenseBtn">Add Expense</button>
                             </div>
                         </form>
                     </div>
                 </div>
+
+                <!-- Expense Edit Overlay -->
+                <div id="expenseEditOverlay" class="edit-overlay hidden">
+                    <div class="edit-page">
+                        <div class="form-card">
+                            <h3 id="expenseFormTitle">Add Expense</h3>
+                            <form id="expenseEditForm">
+                                <div class="form-group">
+                                    <label for="expenseCategoryEdit">Category</label>
+                                    <select id="expenseCategoryEdit" name="expenseCategory" required>
+                                        <option value="">Select category...</option>
+                                        <option value="maintenance">Maintenance</option>
+                                        <option value="utilities">Utilities</option>
+                                        <option value="insurance">Insurance</option>
+                                        <option value="taxes">Property Taxes</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="expenseDescriptionEdit">Description</label>
+                                    <input type="text" id="expenseDescriptionEdit" name="expenseDescription" placeholder="What was this expense for?" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="expenseReferenceEdit">Reference (optional)</label>
+                                    <input type="text" id="expenseReferenceEdit" name="expenseReference" placeholder="Invoice #, receipt ref, vendor...">
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="expenseAmountEdit">Amount (Ksh)</label>
+                                        <input type="number" id="expenseAmountEdit" name="expenseAmount" placeholder="25000" required>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="expenseDateEdit">Date</label>
+                                        <input type="date" id="expenseDateEdit" name="expenseDate" required>
+                                    </div>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="button" id="expenseCancelBtn" class="btn btn-secondary">Cancel</button>
+                                    <button type="submit" class="btn btn-primary btn-full">Add Expense</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <!-- End Expense Edit Overlay -->
 
                 <div class="entries-list" id="expensesList">
                     <div class="empty-state">
@@ -584,24 +669,12 @@
                 </div>
 
                 <div class="form-card">
-                    <h3>Monthly Breakdown</h3>
-                    <div id="summaryTable">
+                    <h3>Monthly Summary</h3>
+                    <div id="monthlySummaryCards">
                         <div class="empty-state">
                             <div class="empty-state-icon">📈</div>
                             <div class="empty-state-text">No data to summarize</div>
                             <div class="empty-state-subtext">Add tenants and payments to see reports</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="form-card">
-                    <h3>Per-Tenant Summary</h3>
-                    <p style="margin-bottom: 12px; color: #64748b;">Click a tenant to copy or share a concise summary. Payment type/notes are excluded.</p>
-                    <div id="tenantSummaryList">
-                        <div class="empty-state">
-                            <div class="empty-state-icon">👥</div>
-                            <div class="empty-state-text">No tenant data yet</div>
-                            <div class="empty-state-subtext">Add tenants and payments to generate per-tenant summaries</div>
                         </div>
                     </div>
                 </div>

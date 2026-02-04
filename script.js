@@ -126,6 +126,8 @@ window.idDocumentMode = 'new';
 // Form state variables
 let tenantFormInitialState = '';
 let hasTenantFormChanged = false;
+let propertyFormInitialState = '';
+let hasPropertyFormChanged = false;
 let monthlyFormInitialState = '';
 let hasMonthlyFormChanged = false;
 let expenseFormInitialState = '';
@@ -191,7 +193,7 @@ function checkAuthStatus() {
             });
             
             cleanupInvalidTenants();
-            initializeForms();
+            // Don't initialize forms here - do it in DOMContentLoaded
             setDefaultDates();
             initializePWA();
             setupRealtimeSync();
@@ -824,6 +826,24 @@ window.diagnoseButtonVisibility = diagnoseButtonVisibility;
 document.addEventListener('DOMContentLoaded', () => {
     updateVersionDisplay();
     
+    // Immediately ensure property tab is shown and navigation is hidden
+    console.log('🔧 DOM loaded, setting initial tab state...');
+    const propertyNav = document.getElementById('propertyNavigation');
+    if (propertyNav) {
+        propertyNav.style.display = 'none';
+    }
+    
+    // Ensure property tab is active and visible
+    const propertyTab = document.getElementById('property');
+    if (propertyTab) {
+        propertyTab.classList.add('active');
+        propertyTab.style.display = 'block';
+    }
+    
+    // Initialize forms after DOM is ready
+    console.log('🔧 DOM loaded, initializing forms...');
+    initializeForms();
+    
     // Test button functionality
     setTimeout(() => {
         const moveOutBtn = document.getElementById('moveoutToggleBtn');
@@ -1215,7 +1235,6 @@ function renderProperties() {
             </div>
             <div class="property-actions">
                 <button class="btn btn-small btn-secondary" onclick="event.stopPropagation(); editProperty('${property.id}')">Edit</button>
-                <button class="btn btn-small btn-danger" onclick="event.stopPropagation(); deleteProperty('${property.id}')">Delete</button>
             </div>
         </div>
     `;
@@ -1225,11 +1244,19 @@ function renderProperties() {
 }
 
 function deleteProperty(propertyId) {
+    const idToDelete = propertyId ? parseInt(propertyId) : editingPropertyId;
+    if (!idToDelete) {
+        console.error('🔧 No property ID to delete');
+        return;
+    }
+    
     if (!confirm('Are you sure you want to delete this property? All associated tenant data will also be deleted.')) return;
     
-    data.properties = data.properties.filter(p => p.id !== propertyId);
+    console.log('🔧 Deleting property with ID:', idToDelete);
     
-    if (data.selectedPropertyId === propertyId) {
+    data.properties = data.properties.filter(p => p.id !== idToDelete);
+    
+    if (data.selectedPropertyId === idToDelete) {
         data.selectedPropertyId = null;
     }
     
@@ -1237,7 +1264,8 @@ function deleteProperty(propertyId) {
     renderProperties();
     renderAllEntries();
     updateTenantSelects();
-    showNotification('Property deleted successfully!');
+    cancelPropertyEdit();
+    showToast('Property deleted successfully', 'success');
 }
 
 function getSelectedProperty() {
@@ -1247,10 +1275,22 @@ function getSelectedProperty() {
 
 // Property editing functions
 function editProperty(propertyId) {
-    const property = data.properties.find(p => p.id === propertyId);
-    if (!property) return;
+    console.log('🔧 editProperty called with propertyId:', propertyId, 'type:', typeof propertyId);
+    // Convert to number for comparison (property IDs are stored as numbers)
+    const numericId = parseInt(propertyId, 10);
+    console.log('🔧 Numeric ID:', numericId, 'type:', typeof numericId);
+    
+    const property = data.properties.find(p => p.id === numericId);
+    console.log('🔧 Found property:', property);
+    
+    if (!property) {
+        console.error('🔧 Property not found with ID:', numericId);
+        showNotification('Property not found');
+        return;
+    }
 
-    editingPropertyId = propertyId;
+    // Store as number for consistency
+    editingPropertyId = numericId;
     
     // Populate edit form with property data
     document.getElementById('editPropertyName').value = property.name || '';
@@ -1259,12 +1299,65 @@ function editProperty(propertyId) {
     document.getElementById('editPropertyUnits').value = property.units || 1;
     document.getElementById('editPropertyDescription').value = property.description || '';
     
+    // Store initial state for change detection
+    propertyFormInitialState = JSON.stringify({
+        name: property.name || '',
+        address: property.address || '',
+        type: property.type || '',
+        units: property.units || 1,
+        description: property.description || ''
+    });
+    hasPropertyFormChanged = false;
+    updatePropertyEditButtonState();
+    
     // Show edit overlay
-    document.getElementById('propertyEditOverlay').classList.remove('hidden');
+    const overlay = document.getElementById('propertyEditOverlay');
+    console.log('🔧 Edit overlay element:', overlay);
+    if (overlay) {
+        overlay.classList.remove('hidden');
+        console.log('🔧 Overlay hidden class removed');
+    } else {
+        console.error('🔧 Edit overlay element not found!');
+    }
     document.body.style.overflow = 'hidden';
     
     // Focus on first field
-    document.getElementById('editPropertyName').focus();
+    const firstField = document.getElementById('editPropertyName');
+    if (firstField) {
+        firstField.focus();
+        console.log('🔧 Focused on first field');
+    }
+}
+
+// Check if property form values have changed
+function checkPropertyFormChanges() {
+    const currentState = JSON.stringify({
+        name: document.getElementById('editPropertyName').value.trim(),
+        address: document.getElementById('editPropertyAddress').value.trim(),
+        type: document.getElementById('editPropertyType').value,
+        units: parseInt(document.getElementById('editPropertyUnits').value) || 1,
+        description: document.getElementById('editPropertyDescription').value.trim()
+    });
+    hasPropertyFormChanged = currentState !== propertyFormInitialState;
+    console.log('🔧 Property form change detected:', hasPropertyFormChanged);
+    console.log('🔧 Current state:', currentState);
+    console.log('🔧 Initial state:', propertyFormInitialState);
+    updatePropertyEditButtonState();
+}
+
+// Enable/disable the update button based on changes
+function updatePropertyEditButtonState() {
+    const updateBtn = document.querySelector('#propertyEditForm button[type="submit"]');
+    console.log('🔧 Updating property edit button state, hasPropertyFormChanged:', hasPropertyFormChanged);
+    console.log('🔧 Update button found:', !!updateBtn);
+    if (updateBtn) {
+        updateBtn.disabled = !hasPropertyFormChanged;
+        updateBtn.style.opacity = hasPropertyFormChanged ? '1' : '0.5';
+        updateBtn.style.cursor = hasPropertyFormChanged ? 'pointer' : 'not-allowed';
+        console.log('🔧 Button state updated - disabled:', updateBtn.disabled);
+    } else {
+        console.error('🔧 Property edit button not found!');
+    }
 }
 
 function cancelPropertyEdit() {
@@ -1275,7 +1368,11 @@ function cancelPropertyEdit() {
 }
 
 function updateProperty() {
-    if (!editingPropertyId) return;
+    console.log('🔧 updateProperty() called, editingPropertyId:', editingPropertyId, 'type:', typeof editingPropertyId);
+    if (!editingPropertyId) {
+        console.error('🔧 No editingPropertyId, exiting');
+        return;
+    }
 
     const propertyName = document.getElementById('editPropertyName').value.trim();
     const propertyAddress = document.getElementById('editPropertyAddress').value.trim();
@@ -1283,13 +1380,27 @@ function updateProperty() {
     const propertyUnits = document.getElementById('editPropertyUnits').value;
     const propertyDescription = document.getElementById('editPropertyDescription').value.trim();
 
+    console.log('🔧 Form values:', { propertyName, propertyAddress, propertyType, propertyUnits, propertyDescription });
+
     if (!propertyName || !propertyAddress || !propertyType || !propertyUnits) {
+        console.error('🔧 Validation failed - missing required fields');
         showNotification('Please fill in all required property fields');
         return;
     }
 
-    const propertyIndex = data.properties.findIndex(p => p.id === editingPropertyId);
-    if (propertyIndex === -1) return;
+    // Fix type mismatch - ensure we're comparing numbers
+    const numericEditingId = parseInt(editingPropertyId, 10);
+    console.log('🔧 Looking for property with numeric ID:', numericEditingId);
+    
+    const propertyIndex = data.properties.findIndex(p => p.id === numericEditingId);
+    console.log('🔧 Property index found:', propertyIndex);
+    console.log('🔧 Available property IDs:', data.properties.map(p => ({ id: p.id, type: typeof p.id })));
+    
+    if (propertyIndex === -1) {
+        console.error('🔧 Property not found with ID:', numericEditingId);
+        showNotification('Property not found');
+        return;
+    }
 
     // Update property data
     data.properties[propertyIndex] = {
@@ -1302,6 +1413,7 @@ function updateProperty() {
         updatedAt: new Date().toISOString()
     };
 
+    console.log('🔧 Property updated, saving data...');
     saveData();
     renderProperties();
     cancelPropertyEdit();
@@ -1524,20 +1636,31 @@ function initializeNavigation() {
 
 // ===== FORM INITIALIZATION =====
 function initializeForms() {
+    console.log('🔧 Initializing forms...');
+    
     // Add new tenant form
     const addTenantForm = document.getElementById('addTenantForm');
+    console.log('🔧 addTenantForm found:', !!addTenantForm);
     if (addTenantForm) {
         addTenantForm.addEventListener('submit', function(e) {
+            console.log('👥 addTenantForm submit event fired');
             e.preventDefault();
             addNewTenant();
         });
+        console.log('🔧 addTenantForm event listener attached');
     }
 
     // Tenant form (for editing overlay)
-    document.getElementById('tenantForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        addTenant();
-    });
+    const tenantForm = document.getElementById('tenantForm');
+    console.log('🔧 tenantForm found:', !!tenantForm);
+    if (tenantForm) {
+        tenantForm.addEventListener('submit', function(e) {
+            console.log('👥 tenantForm submit event fired');
+            e.preventDefault();
+            addTenant();
+        });
+        console.log('🔧 tenantForm event listener attached');
+    }
 
     // Add file input change listeners for immediate display
     document.getElementById('leaseDocument').addEventListener('change', function(e) {
@@ -1643,6 +1766,77 @@ function initializeForms() {
             updateTenantFormButtons();
         }
     });
+
+    // Add file input change listeners for new tenant form
+    const newLeaseDocumentEl = document.getElementById('newLeaseDocument');
+    if (newLeaseDocumentEl) {
+        newLeaseDocumentEl.addEventListener('change', function(e) {
+            const newFiles = e.target.files;
+            if (newFiles && newFiles.length > 0) {
+                // Display files
+                let filesHtml = '<div>';
+                for (let i = 0; i < newFiles.length; i++) {
+                    filesHtml += `
+                        <div>
+                            <span>${newFiles[i].name}</span>
+                            <span style="color: #64748b; font-size: 0.75rem;"> (${(newFiles[i].size / 1024).toFixed(1)} KB)</span>
+                        </div>
+                    `;
+                }
+                filesHtml += '</div>';
+                document.getElementById('newLeaseDocumentDisplay').innerHTML = filesHtml;
+                
+                // Update upload button state
+                const uploadBtn = document.getElementById('newLeaseUploadBtn');
+                if (newFiles.length >= 3) {
+                    uploadBtn.disabled = true;
+                    uploadBtn.style.opacity = '0.5';
+                    uploadBtn.style.cursor = 'not-allowed';
+                    uploadBtn.textContent = 'Max 3 files';
+                } else {
+                    uploadBtn.disabled = false;
+                    uploadBtn.style.opacity = '1';
+                    uploadBtn.style.cursor = 'pointer';
+                    uploadBtn.textContent = 'Upload';
+                }
+            }
+        });
+    }
+
+    const newTenantIdDocumentEl = document.getElementById('newTenantIdDocument');
+    if (newTenantIdDocumentEl) {
+        newTenantIdDocumentEl.addEventListener('change', function(e) {
+            const newFiles = e.target.files;
+            if (newFiles && newFiles.length > 0) {
+                // Display files
+                let filesHtml = '<div>';
+                for (let i = 0; i < newFiles.length; i++) {
+                    filesHtml += `
+                        <div>
+                            <span>${newFiles[i].name}</span>
+                            <span style="color: #64748b; font-size: 0.75rem;"> (${(newFiles[i].size / 1024).toFixed(1)} KB)</span>
+                        </div>
+                    `;
+                }
+                filesHtml += '</div>';
+                document.getElementById('newTenantIdDocumentDisplay').innerHTML = filesHtml;
+                
+                // Update upload button state
+                const uploadBtn = document.getElementById('newIdUploadBtn');
+                if (newFiles.length >= 3) {
+                    uploadBtn.disabled = true;
+                    uploadBtn.style.opacity = '0.5';
+                    uploadBtn.style.cursor = 'not-allowed';
+                    uploadBtn.textContent = 'Max 3 files';
+                } else {
+                    uploadBtn.disabled = false;
+                    uploadBtn.style.opacity = '1';
+                    uploadBtn.style.cursor = 'pointer';
+                    uploadBtn.textContent = 'Upload';
+                }
+            }
+        });
+    }
 
     console.log('🚀 Event listeners initialization starting...');
     
@@ -1798,11 +1992,22 @@ function initializeForms() {
 
     // Property edit form
     const propertyEditForm = document.getElementById('propertyEditForm');
+    console.log('🔧 propertyEditForm found:', !!propertyEditForm);
     if (propertyEditForm) {
         propertyEditForm.addEventListener('submit', function(e) {
+            console.log('🔧 propertyEditForm submit event fired');
             e.preventDefault();
             updateProperty();
         });
+        
+        // Add input listeners for change detection
+        const propertyFields = propertyEditForm.querySelectorAll('input, select, textarea');
+        console.log('🔧 Property fields found for change detection:', propertyFields.length);
+        propertyFields.forEach(field => {
+            field.addEventListener('input', checkPropertyFormChanges);
+            field.addEventListener('change', checkPropertyFormChanges);
+        });
+        console.log('🔧 propertyEditForm event listeners attached');
     }
 
     // Query form
@@ -2210,40 +2415,80 @@ function toggleQueryForm() {
 
 // Add tenant
 function addNewTenant() {
+    console.log('👥 addNewTenant() called');
     if (!data.selectedPropertyId) {
+        console.error('👥 No property selected');
         showNotification('Please select a property first');
         return;
     }
 
     const form = document.getElementById('addTenantForm');
-    if (!form) return;
+    if (!form) {
+        console.error('👥 addTenantForm not found');
+        return;
+    }
 
-    // Get form values
-    const tenantName = document.getElementById('newTenantName').value.trim();
-    const tenantUnit = document.getElementById('newTenantUnit').value;
-    const tenantRent = document.getElementById('newTenantRent').value;
-    const tenantPhone = document.getElementById('newTenantPhone').value.trim();
-    const tenantEmail = document.getElementById('newTenantEmail').value.trim();
-    const tenantSince = document.getElementById('newTenantSince').value;
-    const depositPaid = document.getElementById('newDepositPaid').value;
-    const electricityMeter = document.getElementById('newElectricityMeter').value.trim();
-    const electricityBalance = document.getElementById('newElectricityBalance').value;
-    const waterMeter = document.getElementById('newWaterMeter').value.trim();
-    const waterBalance = document.getElementById('newWaterBalance').value;
-    const tenantNotes = document.getElementById('newTenantNotes').value.trim();
+    console.log('👥 Form found, getting values...');
 
-    // Handle document uploads
-    const leaseDocumentFiles = document.getElementById('newLeaseDocument').files;
-    const idDocumentFiles = document.getElementById('newTenantIdDocument').files;
+    // Get form values with null checks
+    const tenantNameEl = document.getElementById('newTenantName');
+    const tenantUnitEl = document.getElementById('newTenantUnit');
+    const tenantRentEl = document.getElementById('newTenantRent');
+    const tenantPhoneEl = document.getElementById('newTenantPhone');
+    const tenantEmailEl = document.getElementById('newTenantEmail');
+    const tenantSinceEl = document.getElementById('newTenantSince');
+    const depositPaidEl = document.getElementById('newDepositPaid');
+    const electricityMeterEl = document.getElementById('newElectricityMeter');
+    const electricityBalanceEl = document.getElementById('newElectricityBalance');
+    const waterMeterEl = document.getElementById('newWaterMeter');
+    const waterBalanceEl = document.getElementById('newWaterBalance');
+    const tenantNotesEl = document.getElementById('newTenantNotes');
+
+    console.log('👥 Form elements found:', {
+        tenantName: !!tenantNameEl,
+        tenantUnit: !!tenantUnitEl,
+        tenantRent: !!tenantRentEl,
+        tenantSince: !!tenantSinceEl
+    });
+
+    const tenantName = tenantNameEl ? tenantNameEl.value.trim() : '';
+    const tenantUnit = tenantUnitEl ? tenantUnitEl.value : '';
+    const tenantRent = tenantRentEl ? tenantRentEl.value : '';
+    const tenantPhone = tenantPhoneEl ? tenantPhoneEl.value.trim() : '';
+    const tenantEmail = tenantEmailEl ? tenantEmailEl.value.trim() : '';
+    const tenantSince = tenantSinceEl ? tenantSinceEl.value : '';
+    const depositPaid = depositPaidEl ? depositPaidEl.value : '';
+    const electricityMeter = electricityMeterEl ? electricityMeterEl.value.trim() : '';
+    const electricityBalance = electricityBalanceEl ? electricityBalanceEl.value : '';
+    const waterMeter = waterMeterEl ? waterMeterEl.value.trim() : '';
+    const waterBalance = waterBalanceEl ? waterBalanceEl.value : '';
+    const tenantNotes = tenantNotesEl ? tenantNotesEl.value.trim() : '';
+
+    console.log('👥 Form values:', { tenantName, tenantUnit, tenantRent, tenantSince });
+
+    // Handle document uploads with null checks
+    const leaseDocumentEl = document.getElementById('newLeaseDocument');
+    const idDocumentEl = document.getElementById('newTenantIdDocument');
+    const leaseDocumentFiles = leaseDocumentEl ? leaseDocumentEl.files : [];
+    const idDocumentFiles = idDocumentEl ? idDocumentEl.files : [];
+
+    console.log('👥 File elements found:', {
+        leaseDocument: !!leaseDocumentEl,
+        idDocument: !!idDocumentEl,
+        leaseFilesCount: leaseDocumentFiles ? leaseDocumentFiles.length : 0,
+        idFilesCount: idDocumentFiles ? idDocumentFiles.length : 0
+    });
 
     // Validation
     if (!tenantName || !tenantUnit || !tenantRent || !tenantSince) {
+        console.error('👥 Validation failed - missing required fields');
         showNotification('Please fill in all required fields');
         return;
     }
 
     // Validate that a unit was selected (not the placeholder)
     if (!tenantUnit || tenantUnit === "") {
+        console.error('👥 No unit selected');
         showNotification('Please select a unit');
         return;
     }
@@ -2251,6 +2496,7 @@ function addNewTenant() {
     // Check for duplicate unit within the selected property
     const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
     if (!selectedProperty) {
+        console.error('👥 Selected property not found');
         showNotification('Please select a property first');
         return;
     }
@@ -2263,9 +2509,12 @@ function addNewTenant() {
     const maxUnits = selectedProperty.units || 1;
     
     if (occupiedUnits >= maxUnits) {
+        console.error('👥 Property at maximum capacity');
         showNotification(`Property has reached maximum capacity (${maxUnits} units). Cannot add more tenants.`);
         return;
     }
+
+    console.log('👥 Validation passed, creating tenant...');
 
     // Create new tenant object
     const tenant = {
@@ -2319,16 +2568,21 @@ function addNewTenant() {
     }
     selectedProperty.tenants.push(tenant);
     
+    console.log('👥 Tenant added to property, saving data...');
     saveData();
+    console.log('👥 Data saved, updating UI...');
     // Update UI
     renderTenants();
     updateTenantSelects();
 
+    console.log('👥 UI updated, resetting form...');
     // Reset form and collapse
     form.reset();
     toggleTenantForm();
 
+    console.log('👥 Form reset, showing success notification...');
     showNotification('Tenant added successfully!');
+    console.log('👥 addNewTenant() completed successfully');
 }
 
 // Add tenant (for editing overlay)
@@ -2988,7 +3242,10 @@ function renderTenants() {
     }
 
     // Sort tenants by numeric part of unit when possible, fallback to string
-    const sortedTenants = propertyTenants.slice().sort((a, b) => {
+    // Filter out archived tenants
+    const activeTenants = propertyTenants.filter(tenant => !tenant.archived);
+    
+    const sortedTenants = activeTenants.slice().sort((a, b) => {
         const aNum = parseInt((a.unit || '').match(/\d+/)?.[0] || '0');
         const bNum = parseInt((b.unit || '').match(/\d+/)?.[0] || '0');
         if (aNum !== bNum) return aNum - bNum;
@@ -3003,13 +3260,13 @@ function renderTenants() {
                 ${tenant.movedOut ? `<div class="moved-out-stamp">Moved Out ${tenant.moveOutDate ? new Date(tenant.moveOutDate).toLocaleDateString() : ''}</div>` : ''}
             </div>
             <div class="entry-details">
-                <div>Unit: ${tenant.unit}</div>
-                <div>Phone: ${tenant.phone || 'Not provided'}</div>
-                <div>Email: ${tenant.email || 'Not provided'}</div>
-                <div>Tenant Since: ${tenant.since ? new Date(tenant.since).toLocaleDateString() : 'Not specified'}</div>
-                <div>Deposit: Ksh ${tenant.depositPaid || 0}</div>
-                <div>Electricity: ${tenant.electricityMeter || '—'} (Balance: Ksh ${tenant.electricityBalance || 0})</div>
-                <div>Water: ${tenant.waterMeter || '—'} (Balance: Ksh ${tenant.waterBalance || 0})</div>
+                <div><span class="field-label">Unit:</span> ${tenant.unit}</div>
+                <div><span class="field-label">Phone:</span> ${tenant.phone || 'Not provided'}</div>
+                <div><span class="field-label">Email:</span> ${tenant.email || 'Not provided'}</div>
+                <div><span class="field-label">Tenant Since:</span> ${tenant.since ? new Date(tenant.since).toLocaleDateString() : 'Not specified'}</div>
+                <div><span class="field-label">Deposit:</span> Ksh ${tenant.depositPaid || 0}</div>
+                <div><span class="field-label">Electricity:</span> ${tenant.electricityMeter || '—'} (Balance: Ksh ${tenant.electricityBalance || 0})</div>
+                <div><span class="field-label">Water:</span> ${tenant.waterMeter || '—'} (Balance: Ksh ${tenant.waterBalance || 0})</div>
                 ${tenant.notes ? `<div class="tenant-notes">${tenant.notes}</div>` : ''}
                 <div class="document-status">
                     <span class="lease-status">
@@ -3022,6 +3279,7 @@ function renderTenants() {
             </div>
             <div class="entry-actions">
                 <button class="btn btn-small btn-secondary" onclick="editTenant(${tenant.id})">Edit</button>
+                <button class="btn btn-small btn-warning" onclick="archiveTenant(${tenant.id})">Archive</button>
                 <button class="btn btn-small btn-danger" onclick="deleteTenant(${tenant.id})">Delete</button>
             </div>
         </div>
@@ -3069,8 +3327,8 @@ function renderMonthly() {
                     <div class="entry-amount">Ksh ${payment.amount}</div>
                 </div>
                 <div class="entry-details">
-                    <div>Date: ${new Date(payment.date).toLocaleDateString()}</div>
-                    <div>${payment.notes || 'No notes'}</div>
+                    <div><span class="field-label">Date:</span> ${new Date(payment.date).toLocaleDateString()}</div>
+                    <div class="payment-notes">${payment.notes || 'No notes'}</div>
                 </div>
                 <div class="entry-actions">
                     <button class="btn btn-small btn-secondary" onclick="editMonthly(${payment.id})">Edit</button>
@@ -3123,9 +3381,9 @@ function renderExpenses() {
                 <div class="entry-amount">Ksh ${expense.amount}</div>
             </div>
             <div class="entry-details">
-                <div>Category: ${expense.category}</div>
-                <div>Date: ${new Date(expense.date).toLocaleDateString()}</div>
-                ${expense.reference ? `<div>Reference: ${expense.reference}</div>` : ''}
+                <div><span class="field-label">Category:</span> ${expense.category}</div>
+                <div><span class="field-label">Date:</span> ${new Date(expense.date).toLocaleDateString()}</div>
+                ${expense.reference ? `<div><span class="field-label">Reference:</span> ${expense.reference}</div>` : ''}
             </div>
             <div class="entry-actions">
                 <button class="btn btn-small btn-secondary" onclick="editExpense(${expense.id})">Edit</button>
@@ -3183,8 +3441,8 @@ function renderMoveOuts() {
                     <div class="entry-amount">Ksh ${moveOut.depositReturned || 0}</div>
                 </div>
                 <div class="entry-details">
-                    <div>Unit: ${tenant ? tenant.unit : 'Unknown'}</div>
-                    <div>Move Out Date: ${new Date(moveOut.date).toLocaleDateString()}</div>
+                    <div><span class="field-label">Unit:</span> ${tenant ? tenant.unit : 'Unknown'}</div>
+                    <div><span class="field-label">Move Out Date:</span> ${new Date(moveOut.date).toLocaleDateString()}</div>
                     <div>${moveOut.notes || 'No notes'}</div>
                 </div>
                 <div class="entry-actions">
@@ -3209,8 +3467,8 @@ function updateTenantSelects() {
         }
     }
 
-    // Filter out moved out tenants for selects
-    const activeTenants = propertyTenants.filter(t => !t.movedOut);
+    // Filter out moved out and archived tenants for selects
+    const activeTenants = propertyTenants.filter(t => !t.movedOut && !t.archived);
 
     const tenantsList = activeTenants.slice().sort((a, b) => {
         const aNum = parseInt((a.unit || '').match(/\d+/)?.[0] || '0');
@@ -3225,6 +3483,38 @@ function updateTenantSelects() {
     const options = '<option value="">Choose a tenant...</option>' + tenantOptions;
     
     if (monthlySelect) monthlySelect.innerHTML = options;
+}
+
+// ===== ARCHIVE FUNCTIONS =====
+function archiveTenant(id) {
+    const confirmMessage = `ARCHIVE TENANT - This will:
+
+• Remove tenant from the active tenant list
+• Data will only be accessible through CSV export
+
+This action CANNOT be reversed.
+
+Do you want to archive this tenant?`;
+    
+    if (confirm(confirmMessage)) {
+        // Archive tenant from hierarchical structure
+        for (const property of data.properties) {
+            if (property.tenants) {
+                const index = property.tenants.findIndex(t => t.id === id);
+                if (index !== -1) {
+                    const tenant = property.tenants[index];
+                    // Mark as archived instead of deleting
+                    tenant.archived = true;
+                    tenant.archivedDate = new Date().toISOString();
+                    break;
+                }
+            }
+        }
+        saveData();
+        renderTenants();
+        showToast('Tenant archived - data saved in database', 'success');
+        updateTenantSelects();
+    }
 }
 
 // ===== DELETE FUNCTIONS =====
@@ -3463,10 +3753,10 @@ function updateSummary() {
         expenseEl.textContent = 'Ksh 0';
         netEl.textContent = 'Ksh 0';
         
-        // Update summary table to show no property selected
-        const summaryTable = document.getElementById('summaryTable');
-        if (summaryTable) {
-            summaryTable.innerHTML = `
+        // Update monthly summary to show no property selected
+        const monthlySummaryCards = document.getElementById('monthlySummaryCards');
+        if (monthlySummaryCards) {
+            monthlySummaryCards.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-state-icon">🏢</div>
                     <div class="empty-state-text">No property selected</div>
@@ -3528,64 +3818,90 @@ function updateSummary() {
     netEl.parentElement.style.visibility = 'visible !important';
     console.log('✅ Updated net element:', netEl.textContent);
     
-    // Update summary table for selected property
-    const summaryTable = document.getElementById('summaryTable');
-    if (summaryTable) {
-        let tableHTML = '<table class="summary-table"><thead><tr><th>Property</th><th>Income</th><th>Expenses</th><th>Net</th></tr></thead><tbody>';
+    // Update monthly summary cards for selected property
+    const monthlySummaryCards = document.getElementById('monthlySummaryCards');
+    if (monthlySummaryCards) {
+        // Group monthly payments by month
+        const monthlyData = {};
         
-        tableHTML += `
-            <tr>
-                <td>${selectedProperty.name}</td>
-                <td>Ksh ${totalIncome.toLocaleString()}</td>
-                <td>Ksh ${totalExpenses.toLocaleString()}</td>
-                <td>Ksh ${netIncome.toLocaleString()}</td>
-            </tr>
-        `;
+        // Process monthly payments
+        if (selectedProperty.monthly && selectedProperty.monthly.length > 0) {
+            selectedProperty.monthly.forEach(payment => {
+                const month = payment.date.substring(0, 7); // Extract YYYY-MM from YYYY-MM-DD
+                if (!monthlyData[month]) {
+                    monthlyData[month] = {
+                        income: 0,
+                        expenses: 0,
+                        month: month
+                    };
+                }
+                monthlyData[month].income += parseFloat(payment.amount) || 0;
+            });
+        }
         
-        tableHTML += '</tbody></table>';
-        summaryTable.innerHTML = tableHTML;
-        console.log('✅ Updated summary table for selected property');
+        // Process expenses
+        if (selectedProperty.expenses && selectedProperty.expenses.length > 0) {
+            selectedProperty.expenses.forEach(expense => {
+                const month = expense.date.substring(0, 7); // Extract YYYY-MM from YYYY-MM-DD
+                if (!monthlyData[month]) {
+                    monthlyData[month] = {
+                        income: 0,
+                        expenses: 0,
+                        month: month
+                    };
+                }
+                monthlyData[month].expenses += parseFloat(expense.amount) || 0;
+            });
+        }
+        
+        // Sort months in descending order (most recent first)
+        const sortedMonths = Object.keys(monthlyData).sort((a, b) => b.localeCompare(a));
+        
+        if (sortedMonths.length === 0) {
+            monthlySummaryCards.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">📈</div>
+                    <div class="empty-state-text">No data to summarize</div>
+                    <div class="empty-state-subtext">Add tenants and payments to see reports</div>
+                </div>
+            `;
+        } else {
+            let cardsHTML = '<div class="monthly-cards-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;">';
+            
+            sortedMonths.forEach(month => {
+                const data = monthlyData[month];
+                const net = data.income - data.expenses;
+                const monthName = new Date(month + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                
+                cardsHTML += `
+                    <div class="monthly-card" style="background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                        <h4 style="margin: 0 0 16px 0; color: #374151; font-size: 1.1rem; font-weight: 600;">${monthName}</h4>
+                        <div style="display: grid; gap: 8px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #64748b; font-size: 0.9rem;">Income</span>
+                                <span style="color: #059669; font-weight: 600;">Ksh ${data.income.toLocaleString()}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="color: #64748b; font-size: 0.9rem;">Expenses</span>
+                                <span style="color: #dc2626; font-weight: 600;">Ksh ${data.expenses.toLocaleString()}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 8px; border-top: 1px solid #e5e7eb;">
+                                <span style="color: #374151; font-size: 0.9rem; font-weight: 600;">Net</span>
+                                <span style="color: ${net >= 0 ? '#059669' : '#dc2626'}; font-weight: 700; font-size: 1rem;">Ksh ${net.toLocaleString()}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            cardsHTML += '</div>';
+            monthlySummaryCards.innerHTML = cardsHTML;
+        }
+        
+        console.log('✅ Updated monthly summary cards for selected property');
     }
     
     console.log('🎯 updateSummary completed successfully for selected property');
-}
-
-// Helper: build tenant summary text (exclude payment type/notes)
-function buildTenantSummaryText(tenantId) {
-    // Find the tenant across all properties
-    let selectedTenant = null;
-    let tenantProperty = null;
-    
-    for (const property of data.properties) {
-        if (property.tenants) {
-            const tenant = property.tenants.find(t => t.id == tenantId);
-            if (tenant) {
-                selectedTenant = tenant;
-                tenantProperty = property;
-                break;
-            }
-        }
-    }
-    
-    if (!selectedTenant) return 'Tenant not found';
-    
-    const payments = (tenantProperty.monthly || []).filter(p => String(p.tenantId) === String(selectedTenant.id));
-    const totalPaid = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
-    const paymentsCount = payments.length;
-    const lastPaymentDate = payments.length ? payments.map(p => p.date).sort().reverse()[0] : null;
-    const moveOut = (tenantProperty.moveOuts || []).find(m => String(m.tenantId) === String(selectedTenant.id));
-    const depositReturned = moveOut ? (moveOut.depositReturned || 0) : null;
-
-    const lines = [];
-    lines.push(`${tenant.name}${tenant.unit ? ' — ' + tenant.unit : ''}`);
-    lines.push(`Rent: Ksh ${tenant.rent || '0'}`);
-    lines.push(`Total Paid: Ksh ${totalPaid.toFixed(2)}`);
-    lines.push(`Payments Count: ${paymentsCount}`);
-    lines.push(`Last Payment: ${lastPaymentDate ? new Date(lastPaymentDate).toLocaleDateString() : 'N/A'}`);
-    if (depositReturned !== null) lines.push(`Deposit Returned: Ksh ${depositReturned}`);
-    lines.push('Generated by Rental Manager');
-
-    return lines.join('\n');
 }
 
 // ===== BACKUP FUNCTIONS =====
@@ -5176,6 +5492,7 @@ function processIdDocuments(existingIdDocuments, existingIdDocument, newFiles) {
 // ===== EXPOSE FUNCTIONS TO GLOBAL SCOPE =====
 window.showTab = showTab;
 window.deleteTenant = deleteTenant;
+window.archiveTenant = archiveTenant;
 window.deleteMonthly = deleteMonthly;
 window.deleteExpense = deleteExpense;
 window.deleteMoveOut = deleteMoveOut;
@@ -5202,7 +5519,9 @@ window.toggleUserMenu = toggleUserMenu;
 window.closeUserMenu = closeUserMenu;
 window.showBackupSection = showBackupSection;
 window.editProperty = editProperty;
+window.deleteProperty = deleteProperty;
 window.cancelPropertyEdit = cancelPropertyEdit;
+window.checkPropertyFormChanges = checkPropertyFormChanges;
 window.updateProperty = updateProperty;
 window.backToProperties = backToProperties;
 window.selectProperty = selectProperty;

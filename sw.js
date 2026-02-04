@@ -50,15 +50,23 @@ self.addEventListener('fetch', event => {
   if (event.request.url.includes('firebaseio.com') || 
       event.request.url.includes('gstatic.com') ||
       event.request.url.includes('firebasestorage.app') ||
-      event.request.url.includes('firebaseapp.com')) {
+      event.request.url.includes('firebaseapp.com') ||
+      event.request.url.includes('googleapis.com')) {
+    console.log('SW: Skipping Firebase request:', event.request.url);
+    return;
+  }
+
+  // Only cache GET requests to avoid POST errors
+  if (event.request.method !== 'GET') {
+    console.log('SW: Skipping non-GET request:', event.request.method, event.request.url);
     return;
   }
 
   event.respondWith(
     fetch(event.request)
       .then(response => {
-        // If request is successful, cache it
-        if (response && response.status === 200) {
+        // If request is successful, cache it (only GET requests)
+        if (response && response.status === 200 && event.request.method === 'GET') {
           const responseClone = response.clone();
           caches.open(CACHE_NAME).then(cache => {
             cache.put(event.request, responseClone);
