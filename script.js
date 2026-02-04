@@ -876,14 +876,68 @@ function applyUpdate() {
     }
 }
 
+// ===== COLOR GRADIENT FUNCTIONS =====
+function getPropertyGradient(propertyId) {
+    // Array of dark contrasting gradients with black tones - no white tints
+    const gradients = [
+        'linear-gradient(135deg, #2d1b69 0%, #0f0c29 100%)', // Deep Purple-Black
+        'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)', // Midnight Blue
+        'linear-gradient(135deg, #0f3443 0%, #34e89e 100%)', // Dark Teal to Green
+        'linear-gradient(135deg, #2c003e 0%, #512b58 100%)', // Dark Purple
+        'linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)', // Deep Blue
+        'linear-gradient(135deg, #141e30 0%, #243b55 100%)', // Dark Navy
+        'linear-gradient(135deg, #0f2027 0%, #203a43 100%)', // Dark Cyan
+        'linear-gradient(135deg, #2b1b17 0%, #5c3317 100%)', // Dark Brown
+        'linear-gradient(135deg, #1a1a1a 0%, #434343 100%)', // Dark Gray
+        'linear-gradient(135deg, #0d1117 0%, #161b22 100%)', // GitHub Dark
+        'linear-gradient(135deg, #1e3a5f 0%, #2c5f2d 100%)', // Forest Dark
+        'linear-gradient(135deg, #2d1b00 0%, #5d4e37 100%)', // Dark Bronze
+        'linear-gradient(135deg, #1a0033 0%, #330867 100%)', // Deep Violet
+        'linear-gradient(135deg, #0d0221 0%, #1a1a3e 100%)', // Space Dark
+        'linear-gradient(135deg, #2e1a47 0%, #4a2c4e 100%)', // Dark Plum
+        'linear-gradient(135deg, #1a2332 0%, #2d4059 100%)', // Slate Dark
+        'linear-gradient(135deg, #0f0f0f 0%, #363636 100%)', // Pure Black
+        'linear-gradient(135deg, #1a237e 0%, #283593 100%)', // Indigo Dark
+        'linear-gradient(135deg, #263238 0%, #37474f 100%)', // Blue Gray Dark
+        'linear-gradient(135deg, #1b1b1b 0%, #3e2723 100%)'  // Dark Espresso
+    ];
+    
+    // Use property ID to consistently assign the same gradient to each property
+    const index = Math.abs(propertyId) % gradients.length;
+    return gradients[index];
+}
+
+function updatePropertyHeaderColors(property) {
+    const headers = [
+        { id: 'tenantsPropertyHeader', cardId: 'tenantsPropertyHeader' },
+        { id: 'monthlyPropertyHeader', cardId: 'monthlyPropertyHeader' },
+        { id: 'expensesPropertyHeader', cardId: 'expensesPropertyHeader' },
+        { id: 'summaryPropertyHeader', cardId: 'summaryPropertyHeader' }
+    ];
+    
+    const gradient = getPropertyGradient(property.id);
+    
+    headers.forEach(header => {
+        const headerElement = document.getElementById(header.id);
+        if (headerElement) {
+            const card = headerElement.querySelector('.form-card');
+            if (card) {
+                card.style.background = gradient;
+                card.style.color = 'white';
+                card.style.padding = '20px';
+            }
+        }
+    });
+}
+
 // ===== PROPERTY MANAGEMENT FUNCTIONS =====
 function showAddPropertyForm() {
-    document.getElementById('addPropertyForm').classList.remove('hidden');
+    document.getElementById('addPropertyForm').style.display = 'block';
     document.getElementById('propertyName').focus();
 }
 
 function hideAddPropertyForm() {
-    document.getElementById('addPropertyForm').classList.add('hidden');
+    document.getElementById('addPropertyForm').style.display = 'none';
     document.getElementById('propertyForm').reset();
 }
 
@@ -1009,9 +1063,21 @@ function selectProperty(propertyId) {
         document.getElementById('summaryPropertyAddress').textContent = property.address;
     }
     
+    // Update property header colors with unique gradients
+    updatePropertyHeaderColors(property);
+    
     // Show: Back button
     const tenantsBackButton = document.getElementById('tenantsBackButton');
     if (tenantsBackButton) tenantsBackButton.style.display = 'block';
+    
+    const monthlyBackButton = document.getElementById('monthlyBackButton');
+    if (monthlyBackButton) monthlyBackButton.style.display = 'block';
+    
+    const expensesBackButton = document.getElementById('expensesBackButton');
+    if (expensesBackButton) expensesBackButton.style.display = 'block';
+    
+    const summaryBackButton = document.getElementById('summaryBackButton');
+    if (summaryBackButton) summaryBackButton.style.display = 'block';
     
     // Update: Add New Tenant button
     const tenantToggleBtn = document.getElementById('tenantToggleBtn');
@@ -1020,17 +1086,17 @@ function selectProperty(propertyId) {
         tenantToggleBtn.style.display = 'inline-flex';
     }
     
-    // Update: Monthly toggle button with property name
+    // Update: Monthly toggle button
     const monthlyToggleBtn = document.getElementById('monthlyToggleBtn');
     if (monthlyToggleBtn) {
-        monthlyToggleBtn.textContent = `➕ Record Payment - ${property.name}`;
+        monthlyToggleBtn.textContent = '➕ Record Payment';
         monthlyToggleBtn.style.display = 'inline-flex';
     }
     
-    // Update: Expense toggle button with property name
+    // Update: Expense toggle button
     const expenseToggleBtn = document.getElementById('expenseToggleBtn');
     if (expenseToggleBtn) {
-        expenseToggleBtn.textContent = `➕ Add Expense - ${property.name}`;
+        expenseToggleBtn.textContent = '➕ Add Expense';
         expenseToggleBtn.style.display = 'inline-flex';
     }
     
@@ -1131,6 +1197,15 @@ function backToProperties() {
     // Hide: Back button
     const tenantsBackButton = document.getElementById('tenantsBackButton');
     if (tenantsBackButton) tenantsBackButton.style.display = 'none';
+    
+    const monthlyBackButton = document.getElementById('monthlyBackButton');
+    if (monthlyBackButton) monthlyBackButton.style.display = 'none';
+    
+    const expensesBackButton = document.getElementById('expensesBackButton');
+    if (expensesBackButton) expensesBackButton.style.display = 'none';
+    
+    const summaryBackButton = document.getElementById('summaryBackButton');
+    if (summaryBackButton) summaryBackButton.style.display = 'none';
     
     // Reset: Add New Tenant button text
     const tenantToggleBtn = document.getElementById('tenantToggleBtn');
@@ -1512,7 +1587,7 @@ function showTab(tabName, buttonElement) {
         if (tenantsPropertyHeader) tenantsPropertyHeader.style.display = 'none';
         
         // Hide: Back buttons
-        const backButtons = ['tenantsBackButton', 'monthlyBackButton', 'expensesBackButton'];
+        const backButtons = ['tenantsBackButton', 'monthlyBackButton', 'expensesBackButton', 'summaryBackButton'];
         backButtons.forEach(btnId => {
             const btn = document.getElementById(btnId);
             if (btn) btn.style.display = 'none';
@@ -1573,7 +1648,7 @@ function initializeNavigation() {
     });
     
     // Hide inline back buttons in all property management tabs
-    const backButtons = ['tenantsBackButton', 'monthlyBackButton', 'expensesBackButton'];
+    const backButtons = ['tenantsBackButton', 'monthlyBackButton', 'expensesBackButton', 'summaryBackButton'];
     backButtons.forEach(btnId => {
         const btn = document.getElementById(btnId);
         if (btn) {

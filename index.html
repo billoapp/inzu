@@ -220,17 +220,17 @@
 
             <!-- Tenants Tab -->
             <div id="tenants" class="tab-content" style="display: none;">
+                <!-- Back to Properties button inside tab content -->
+                <div id="tenantsBackButton" style="display: none; margin-bottom: 16px;">
+                    <button class="btn-back-circle" onclick="backToProperties()">←</button>
+                </div>
+                
                 <!-- Property Header (shown when property is selected) -->
                 <div id="tenantsPropertyHeader" style="display: none; margin-bottom: 16px;">
                     <div class="form-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px;">
                         <h2 id="tenantsPropertyName" style="margin: 0; font-size: 1.25rem; font-weight: 600;">Property Name</h2>
                         <p id="tenantsPropertyAddress" style="margin: 8px 0 0 0; opacity: 0.9; font-size: 0.9rem;">Address</p>
                     </div>
-                </div>
-
-                <!-- Back to Properties button inside tab content -->
-                <div id="tenantsBackButton" style="display: none; margin-bottom: 16px;">
-                    <button class="btn-back-circle" onclick="backToProperties()">←</button>
                 </div>
                 
                 <!-- Toggle for the add-tenant form -->
@@ -428,17 +428,17 @@
 
             <!-- Monthly Tab -->
             <div id="monthly" class="tab-content" style="display: none;">
+                <!-- Back to Properties button inside tab content -->
+                <div id="monthlyBackButton" style="display: none; margin-bottom: 16px;">
+                    <button class="btn-back-circle" onclick="backToProperties()">←</button>
+                </div>
+                
                 <!-- Property Header (shown when property is selected) -->
                 <div id="monthlyPropertyHeader" style="display: none; margin-bottom: 16px;">
                     <div class="form-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px;">
                         <h2 id="monthlyPropertyName" style="margin: 0; font-size: 1.25rem; font-weight: 600;">Property Name</h2>
                         <p id="monthlyPropertyAddress" style="margin: 8px 0 0 0; opacity: 0.9; font-size: 0.9rem;">Address</p>
                     </div>
-                </div>
-
-                <!-- Back to Properties button inside tab content -->
-                <div id="monthlyBackButton" style="display: none; margin-bottom: 16px;">
-                    <button class="btn-back-circle" onclick="backToProperties()">←</button>
                 </div>
 
                 <!-- Toggle for the add-monthly form -->
@@ -526,17 +526,17 @@
 
             <!-- Expenses Tab -->
             <div id="expenses" class="tab-content" style="display: none;">
+                <!-- Back to Properties button inside tab content -->
+                <div id="expensesBackButton" style="display: none; margin-bottom: 16px;">
+                    <button class="btn-back-circle" onclick="backToProperties()">←</button>
+                </div>
+                
                 <!-- Property Header (shown when property is selected) -->
                 <div id="expensesPropertyHeader" style="display: none; margin-bottom: 16px;">
                     <div class="form-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px;">
                         <h2 id="expensesPropertyName" style="margin: 0; font-size: 1.25rem; font-weight: 600;">Property Name</h2>
                         <p id="expensesPropertyAddress" style="margin: 8px 0 0 0; opacity: 0.9; font-size: 0.9rem;">Address</p>
                     </div>
-                </div>
-
-                <!-- Back to Properties button inside tab content -->
-                <div id="expensesBackButton" style="display: none; margin-bottom: 16px;">
-                    <button class="btn-back-circle" onclick="backToProperties()">←</button>
                 </div>
 
                 <!-- Toggle for the add-expense form -->
@@ -642,6 +642,11 @@
 
             <!-- Summary Tab -->
             <div id="summary" class="tab-content">
+                <!-- Back to Properties button inside tab content -->
+                <div id="summaryBackButton" style="display: none; margin-bottom: 16px;">
+                    <button class="btn-back-circle" onclick="backToProperties()">←</button>
+                </div>
+                
                 <!-- Property Header (shown when property is selected) -->
                 <div id="summaryPropertyHeader" style="display: none; margin-bottom: 16px;">
                     <div class="form-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px;">
