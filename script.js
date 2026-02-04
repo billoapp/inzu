@@ -993,10 +993,10 @@ function selectProperty(propertyId) {
     const tenantsBackButton = document.getElementById('tenantsBackButton');
     if (tenantsBackButton) tenantsBackButton.style.display = 'block';
     
-    // Update: Add New Tenant button with property name
+    // Update: Add New Tenant button
     const tenantToggleBtn = document.getElementById('tenantToggleBtn');
     if (tenantToggleBtn) {
-        tenantToggleBtn.textContent = `➕ Add New Tenant - ${property.name}`;
+        tenantToggleBtn.textContent = `➕ Add New Tenant`;
         tenantToggleBtn.style.display = 'inline-flex';
     }
     

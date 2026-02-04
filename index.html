@@ -248,11 +248,13 @@
 
                 <!-- Back to Properties button inside tab content -->
                 <div id="tenantsBackButton" style="display: none; margin-bottom: 16px;">
-                    <button class="btn btn-secondary" onclick="backToProperties()">← Back to Properties</button>
+                    <button class="btn-back-circle" onclick="backToProperties()">←</button>
                 </div>
                 
                 <!-- Toggle for the add-tenant form -->
-                <button class="toggle-btn" id="tenantToggleBtn" onclick="toggleTenantForm()">➕ Add New Tenant</button>
+                <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
+                    <button class="toggle-btn" id="tenantToggleBtn" onclick="toggleTenantForm()">➕ Add New Tenant</button>
+                </div>
                 
                 <!-- Add New Tenant Form (collapsible) -->
                 <div id="tenantFormCollapsible" class="collapsed" style="overflow: hidden; transition: max-height 0.3s ease, opacity 0.3s ease; max-height: 0; opacity: 0;">
@@ -432,11 +434,13 @@
 
                 <!-- Back to Properties button inside tab content -->
                 <div id="monthlyBackButton" style="display: none; margin-bottom: 16px;">
-                    <button class="btn btn-secondary" onclick="backToProperties()">← Back to Properties</button>
+                    <button class="btn-back-circle" onclick="backToProperties()">←</button>
                 </div>
 
                 <!-- Toggle for the add-monthly form -->
-                <button class="toggle-btn" id="monthlyToggleBtn" onclick="toggleMonthlyForm()">➕ Record Payment</button>
+                <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
+                    <button class="toggle-btn" id="monthlyToggleBtn" onclick="toggleMonthlyForm()">➕ Record Payment</button>
+                </div>
                 
                 <!-- Add Monthly Form (collapsible) -->
                 <div id="monthlyFormCollapsible" class="collapsed" style="overflow: hidden; transition: max-height 0.3s ease, opacity 0.3s ease; max-height: 0; opacity: 0;">
@@ -492,11 +496,13 @@
 
                 <!-- Back to Properties button inside tab content -->
                 <div id="expensesBackButton" style="display: none; margin-bottom: 16px;">
-                    <button class="btn btn-secondary" onclick="backToProperties()">← Back to Properties</button>
+                    <button class="btn-back-circle" onclick="backToProperties()">←</button>
                 </div>
 
                 <!-- Toggle for the add-expense form -->
-                <button class="toggle-btn" id="expenseToggleBtn" onclick="toggleExpenseForm()">➕ Add Expense</button>
+                <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
+                    <button class="toggle-btn" id="expenseToggleBtn" onclick="toggleExpenseForm()">➕ Add Expense</button>
+                </div>
                 
                 <!-- Add Expense Form (collapsible) -->
                 <div id="expenseFormCollapsible" class="collapsed" style="overflow: hidden; transition: max-height 0.3s ease, opacity 0.3s ease; max-height: 0; opacity: 0;">
