@@ -965,6 +965,30 @@ function selectProperty(propertyId) {
         document.getElementById('tenantsPropertyAddress').textContent = property.address;
     }
     
+    // Show: Property header in monthly tab with property name
+    const monthlyPropertyHeader = document.getElementById('monthlyPropertyHeader');
+    if (monthlyPropertyHeader) {
+        monthlyPropertyHeader.style.display = 'block';
+        document.getElementById('monthlyPropertyName').textContent = property.name;
+        document.getElementById('monthlyPropertyAddress').textContent = property.address;
+    }
+    
+    // Show: Property header in expenses tab with property name
+    const expensesPropertyHeader = document.getElementById('expensesPropertyHeader');
+    if (expensesPropertyHeader) {
+        expensesPropertyHeader.style.display = 'block';
+        document.getElementById('expensesPropertyName').textContent = property.name;
+        document.getElementById('expensesPropertyAddress').textContent = property.address;
+    }
+    
+    // Show: Property header in summary tab with property name
+    const summaryPropertyHeader = document.getElementById('summaryPropertyHeader');
+    if (summaryPropertyHeader) {
+        summaryPropertyHeader.style.display = 'block';
+        document.getElementById('summaryPropertyName').textContent = property.name;
+        document.getElementById('summaryPropertyAddress').textContent = property.address;
+    }
+    
     // Show: Back button
     const tenantsBackButton = document.getElementById('tenantsBackButton');
     if (tenantsBackButton) tenantsBackButton.style.display = 'block';
@@ -1042,6 +1066,18 @@ function backToProperties() {
     const tenantsPropertyHeader = document.getElementById('tenantsPropertyHeader');
     if (tenantsPropertyHeader) tenantsPropertyHeader.style.display = 'none';
     
+    // Hide: Property header in monthly tab
+    const monthlyPropertyHeader = document.getElementById('monthlyPropertyHeader');
+    if (monthlyPropertyHeader) monthlyPropertyHeader.style.display = 'none';
+    
+    // Hide: Property header in expenses tab
+    const expensesPropertyHeader = document.getElementById('expensesPropertyHeader');
+    if (expensesPropertyHeader) expensesPropertyHeader.style.display = 'none';
+    
+    // Hide: Property header in summary tab
+    const summaryPropertyHeader = document.getElementById('summaryPropertyHeader');
+    if (summaryPropertyHeader) summaryPropertyHeader.style.display = 'none';
+    
     // Hide: Back button
     const tenantsBackButton = document.getElementById('tenantsBackButton');
     if (tenantsBackButton) tenantsBackButton.style.display = 'none';
@@ -1066,7 +1102,7 @@ function backToProperties() {
     if (tenantsList) tenantsList.style.display = 'none';
     
     // Hide all property management tabs
-    const propertyTabs = ['tenants', 'monthly', 'expenses', 'moveouts', 'queries', 'summary'];
+    const propertyTabs = ['tenants', 'monthly', 'expenses', 'summary'];
     propertyTabs.forEach(tabId => {
         const tab = document.getElementById(tabId);
         if (tab) {
@@ -1299,7 +1335,7 @@ function showTab(tabName, buttonElement) {
         }
         
         // Hide: All property management tabs
-        const propertyTabs = ['tenants', 'monthly', 'expenses', 'moveouts', 'queries', 'summary'];
+        const propertyTabs = ['tenants', 'monthly', 'expenses', 'summary'];
         propertyTabs.forEach(tabId => {
             const tab = document.getElementById(tabId);
             if (tab) {
@@ -1314,7 +1350,7 @@ function showTab(tabName, buttonElement) {
         if (tenantsPropertyHeader) tenantsPropertyHeader.style.display = 'none';
         
         // Hide: Back buttons
-        const backButtons = ['tenantsBackButton', 'monthlyBackButton', 'expensesBackButton', 'moveoutsBackButton', 'queriesBackButton'];
+        const backButtons = ['tenantsBackButton', 'monthlyBackButton', 'expensesBackButton'];
         backButtons.forEach(btnId => {
             const btn = document.getElementById(btnId);
             if (btn) btn.style.display = 'none';
@@ -1365,7 +1401,7 @@ function initializeNavigation() {
     }
     
     // Hide all property management tabs (tenants, monthly, expenses, etc.)
-    const propertyTabs = ['tenants', 'monthly', 'expenses', 'moveouts', 'queries', 'summary'];
+    const propertyTabs = ['tenants', 'monthly', 'expenses', 'summary'];
     propertyTabs.forEach(tabId => {
         const tab = document.getElementById(tabId);
         if (tab) {
@@ -1375,7 +1411,7 @@ function initializeNavigation() {
     });
     
     // Hide inline back buttons in all property management tabs
-    const backButtons = ['tenantsBackButton', 'monthlyBackButton', 'expensesBackButton', 'moveoutsBackButton', 'queriesBackButton'];
+    const backButtons = ['tenantsBackButton', 'monthlyBackButton', 'expensesBackButton'];
     backButtons.forEach(btnId => {
         const btn = document.getElementById(btnId);
         if (btn) {
@@ -1389,6 +1425,27 @@ function initializeNavigation() {
     if (propertyHeader) {
         propertyHeader.style.display = 'none';
         propertyHeader.classList.remove('visible');
+    }
+    
+    // Hide property header in monthly tab
+    const monthlyPropertyHeader = document.getElementById('monthlyPropertyHeader');
+    if (monthlyPropertyHeader) {
+        monthlyPropertyHeader.style.display = 'none';
+        monthlyPropertyHeader.classList.remove('visible');
+    }
+    
+    // Hide property header in expenses tab
+    const expensesPropertyHeader = document.getElementById('expensesPropertyHeader');
+    if (expensesPropertyHeader) {
+        expensesPropertyHeader.style.display = 'none';
+        expensesPropertyHeader.classList.remove('visible');
+    }
+    
+    // Hide property header in summary tab
+    const summaryPropertyHeader = document.getElementById('summaryPropertyHeader');
+    if (summaryPropertyHeader) {
+        summaryPropertyHeader.style.display = 'none';
+        summaryPropertyHeader.classList.remove('visible');
     }
     
     // Collapse the add tenant form
@@ -2772,8 +2829,6 @@ function renderAllEntries() {
         renderTenants();
         renderMonthly();
         renderExpenses();
-        renderMoveOuts2();
-        renderQueries();
         updateSummary();
     } else {
         // Show empty states for all property-specific views

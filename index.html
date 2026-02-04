@@ -133,8 +133,6 @@
             <button class="tab-button" onclick="showTab('tenants', this)">Tenants</button>
             <button class="tab-button" onclick="showTab('monthly', this)">Monthly</button>
             <button class="tab-button" onclick="showTab('expenses', this)">Expenses</button>
-            <button class="tab-button" onclick="showTab('moveouts', this)">Move Outs</button>
-            <button class="tab-button" onclick="showTab('queries', this)">Tenant Queries</button>
             <button class="tab-button" onclick="showTab('summary', this)">Summary</button>
         </nav>
 
@@ -424,6 +422,14 @@
 
             <!-- Monthly Tab -->
             <div id="monthly" class="tab-content" style="display: none;">
+                <!-- Property Header (shown when property is selected) -->
+                <div id="monthlyPropertyHeader" style="display: none; margin-bottom: 16px;">
+                    <div class="form-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px;">
+                        <h2 id="monthlyPropertyName" style="margin: 0; font-size: 1.25rem; font-weight: 600;">Property Name</h2>
+                        <p id="monthlyPropertyAddress" style="margin: 8px 0 0 0; opacity: 0.9; font-size: 0.9rem;">Address</p>
+                    </div>
+                </div>
+
                 <!-- Back to Properties button inside tab content -->
                 <div id="monthlyBackButton" style="display: none; margin-bottom: 16px;">
                     <button class="btn btn-secondary" onclick="backToProperties()">← Back to Properties</button>
@@ -506,6 +512,14 @@
 
             <!-- Expenses Tab -->
             <div id="expenses" class="tab-content" style="display: none;">
+                <!-- Property Header (shown when property is selected) -->
+                <div id="expensesPropertyHeader" style="display: none; margin-bottom: 16px;">
+                    <div class="form-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px;">
+                        <h2 id="expensesPropertyName" style="margin: 0; font-size: 1.25rem; font-weight: 600;">Property Name</h2>
+                        <p id="expensesPropertyAddress" style="margin: 8px 0 0 0; opacity: 0.9; font-size: 0.9rem;">Address</p>
+                    </div>
+                </div>
+
                 <!-- Back to Properties button inside tab content -->
                 <div id="expensesBackButton" style="display: none; margin-bottom: 16px;">
                     <button class="btn btn-secondary" onclick="backToProperties()">← Back to Properties</button>
@@ -604,88 +618,16 @@
                 </div>
             </div>
 
-            <!-- Move Outs Tab -->
-            <div id="moveouts" class="tab-content" style="display: none;">
-                <!-- Back to Properties button inside tab content -->
-                <div id="moveoutsBackButton" style="display: none; margin-bottom: 16px;">
-                    <button class="btn btn-secondary" onclick="backToProperties()">← Back to Properties</button>
-                </div>
-                
-                <div class="form-card">
-                    <h3>Record Move Out</h3>
-                    <form id="moveoutForm">
-                        <div class="form-group">
-                            <label for="moveoutTenant">Select Tenant</label>
-                            <select id="moveoutTenant" name="moveoutTenant" required>
-                                <option value="">Choose a tenant...</option>
-                            </select>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="moveoutDate">Move Out Date</label>
-                                <input type="date" id="moveoutDate" name="moveoutDate" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="depositReturned">Security Deposit (Ksh)</label>
-                                <input type="number" id="depositReturned" name="depositReturned" placeholder="0">
-                            <label for="moveoutNotes">Notes</label>
-                            <input type="text" id="moveoutNotes" name="moveoutNotes" placeholder="Reason for leaving, etc.">
-                        </div>
-                        <div class="form-actions">
-                            <button type="button" id="moveOutCancelBtn" class="btn btn-secondary" style="display: none;">Cancel</button>
-                            <button type="submit" class="btn btn-secondary btn-full">Record Move Out</button>
-                        </div>
-                    </form>
+            <!-- Summary Tab -->
+            <div id="summary" class="tab-content">
+                <!-- Property Header (shown when property is selected) -->
+                <div id="summaryPropertyHeader" style="display: none; margin-bottom: 16px;">
+                    <div class="form-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px;">
+                        <h2 id="summaryPropertyName" style="margin: 0; font-size: 1.25rem; font-weight: 600;">Property Name</h2>
+                        <p id="summaryPropertyAddress" style="margin: 8px 0 0 0; opacity: 0.9; font-size: 0.9rem;">Address</p>
+                    </div>
                 </div>
 
-                <!-- Move Outs Tab -->
-                <div id="moveouts" class="tab-content">
-                    <!-- Action buttons row -->
-                    <div class="action-buttons-row hidden">
-                        <div class="back-button-container">
-                            <button class="btn btn-secondary" onclick="backToProperties()">← Back to Properties</button>
-                        </div>
-                        <div class="add-buttons-container">
-                            <button class="toggle-btn" id="moveoutToggleBtn" onclick="toggleMoveOutForm()">➕ Add Move-Out</button>
-                        </div>
-                    </div>
-                    
-                    <!-- Add Move-Out Form (collapsible) -->
-                    <div id="moveoutFormCollapsible" class="collapsible collapsed">
-                        <div class="form-card">
-                            <h3>Record Move Out</h3>
-                            <form id="moveoutForm">
-                                <div class="form-group">
-                                    <label for="moveoutTenant">Select Tenant</label>
-                                    <select id="moveoutTenant" name="moveoutTenant" required>
-                                        <option value="">Choose a tenant...</option>
-                                    </select>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label for="moveoutDate">Move Out Date</label>
-                                        <input type="date" id="moveoutDate" name="moveoutDate" required>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="depositReturned">Security Deposit (Ksh)</label>
-                                        <input type="number" id="depositReturned" name="depositReturned" placeholder="0">
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label for="moveoutNotes">Notes</label>
-                                    <input type="text" id="moveoutNotes" name="moveoutNotes" placeholder="Reason for leaving, etc.">
-                                </div>
-                                <div class="form-actions">
-                                    <button type="button" id="moveOutCancelBtn" class="btn btn-secondary hidden">Cancel</button>
-                                    <button type="submit" class="btn btn-secondary btn-full">Record Move Out</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-
-                    <div class="entries-list" id="moveoutsList">
-                </div>
-                
                 <div class="form-card">
                     <h3>📊 Summary Report</h3>
                     <div class="summary-cards" id="summaryCards">
@@ -727,62 +669,6 @@
                     </div>
                 </div>
             </div>
-
-            <div id="queries" class="tab-content" style="display: none;">
-                <!-- Back to Properties button inside tab content -->
-                <div id="queriesBackButton" style="display: none; margin-bottom: 16px;">
-                    <button class="btn btn-secondary" onclick="backToProperties()">← Back to Properties</button>
-                </div>
-                
-                <div class="form-card">
-                    <h3>Tenant Queries</h3>
-                    <p style="margin-bottom:12px; color:#64748b;">Log tenant queries/issues and track resolution. Click a query to mark resolved.</p>
-                    <div class="form-card">
-                        <h4 style="margin-bottom:8px;">New Query</h4>
-                        <form id="queryForm">
-                            <div class="form-group">
-                                <label for="queryTenant">Tenant</label>
-                                <select id="queryTenant" required>
-                                    <option value="">Select tenant...</option>
-                                </select>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="queryDate">Date</label>
-                                    <input type="date" id="queryDate" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="queryResolved">Resolved</label>
-                                    <select id="queryResolved">
-                                        <option value="false">No</option>
-                                        <option value="true">Yes</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label for="queryIssue">Issue</label>
-                                <textarea id="queryIssue" rows="3" style="width:100%; padding:12px 16px; border:1px solid #d1d5db; border-radius:8px;"></textarea>
-                            </div>
-                            <div class="form-group">
-                                <label for="queryAction">Action Taken</label>
-                                <textarea id="queryAction" rows="2" style="width:100%; padding:12px 16px; border:1px solid #d1d5db; border-radius:8px;"></textarea>
-                            </div>
-                            <div class="form-actions">
-                                <button type="submit" class="btn btn-primary">Log Query</button>
-                            </div>
-                        </form>
-                    </div>
-                    <div style="margin-top:12px;">
-                        <h4 style="margin-bottom:8px;">Queries</h4>
-                        <div id="queriesList">
-                            <div class="empty-state">
-                                <div class="empty-state-icon">📝</div>
-                                <div class="empty-state-text">No queries yet</div>
-                                <div class="empty-state-subtext">Tenant queries will appear here</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
 
             <!-- Backup Tab -->
             <div id="backup" class="tab-content">
