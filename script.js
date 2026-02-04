@@ -1054,7 +1054,7 @@ function selectProperty(propertyId) {
     updateTenantSelects();
     updateSummary();
     
-    // Update unit dropdown for new tenant form
+    // Populate unit dropdown for new tenant form
     populateUnitDropdown();
 }
 
@@ -1197,21 +1197,29 @@ function renderProperties() {
     console.log('🔍 Rendering properties list');
     // Convert selectedPropertyId to number for consistent comparison
     const currentSelectedId = data.selectedPropertyId ? parseInt(data.selectedPropertyId, 10) : null;
-    container.innerHTML = data.properties.map(property => `
-        <div class="property-item ${currentSelectedId === property.id ? 'selected' : ''}" onclick="selectProperty('${property.id}')">
+    container.innerHTML = data.properties.map(property => {
+        // Calculate occupancy
+        const totalUnits = property.units || 1;
+        const occupiedUnits = property.tenants?.filter(t => !t.movedOut).length || 0;
+        const vacantUnits = totalUnits - occupiedUnits;
+        const occupancyText = `${occupiedUnits}/${totalUnits} Occupied - ${vacantUnits} Vacant`;
+        
+        return `
+        <div class="property-card ${currentSelectedId === property.id ? 'selected' : ''}" onclick="selectProperty('${property.id}')">
             <div class="property-info">
                 <div class="property-name">${property.name}</div>
                 <div class="property-details">
-                    ${property.address || 'No address'} • ${property.tenants?.length || 0} tenants
+                    ${property.address || 'No address'} • ${occupancyText}
                 </div>
-                ${property.description ? `<div class="property-description">${property.description}</div>` : ''}
+                <div class="property-description">${property.description || 'No description available'}</div>
             </div>
             <div class="property-actions">
                 <button class="btn btn-small btn-secondary" onclick="event.stopPropagation(); editProperty('${property.id}')">Edit</button>
                 <button class="btn btn-small btn-danger" onclick="event.stopPropagation(); deleteProperty('${property.id}')">Delete</button>
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
     
     console.log('✅ renderProperties completed');
 }
@@ -1837,12 +1845,18 @@ function populateUnitDropdown() {
     // Generate unit options (1 to totalUnits)
     for (let i = 1; i <= totalUnits; i++) {
         const unitNumber = i.toString();
-        if (!occupiedUnits.has(unitNumber)) {
-            const option = document.createElement('option');
-            option.value = unitNumber;
+        const option = document.createElement('option');
+        option.value = unitNumber;
+        
+        if (occupiedUnits.has(unitNumber)) {
+            option.textContent = `Unit ${unitNumber} (Occupied)`;
+            option.disabled = true;
+            option.style.color = '#9ca3af';
+        } else {
             option.textContent = `Unit ${unitNumber}`;
-            unitSelect.appendChild(option);
         }
+        
+        unitSelect.appendChild(option);
     }
     
     // If no units available, show message

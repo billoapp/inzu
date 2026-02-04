@@ -980,40 +980,64 @@ input:focus, textarea:focus, select:focus {
     margin-bottom: 16px;
 }
 
-/* ===== ENTRY CARDS (USE UNIFIED NEUMORPHIC CARDS) ===== */
-.entries-list {
-    margin-top: 20px;
-}
-
-.entry-header {
+/* ===== PROPERTY STYLES ===== */
+.property-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
+    align-items: flex-start;
+    margin-bottom: 16px;
 }
 
-.entry-title {
-    font-size: 1rem;
-    font-weight: 500;
+.property-name {
+    font-size: 1.25rem;
+    font-weight: 700;
     color: #1a1a1a;
+    margin-bottom: 8px;
+    line-height: 1.3;
 }
 
-.entry-amount {
-    font-size: 1.125rem;
-    font-weight: 500;
-    color: #059669;
+.property-info {
+    flex: 1;
+    margin-bottom: 16px;
 }
 
-.entry-details {
-    font-size: 0.875rem;
-    color: #666666;
-    line-height: 1.5;
+.property-details {
+    font-size: 0.9rem;
+    color: #64748b;
+    margin-bottom: 8px;
+    line-height: 1.4;
 }
 
-.entry-actions {
+.property-description {
+    font-size: 0.85rem;
+    color: #64748b;
+    font-style: italic;
+    line-height: 1.4;
+    min-height: 1.4em;
+}
+
+.property-actions {
     display: flex;
-    gap: 8px;
-    margin-top: 12px;
+    gap: 12px;
+    align-items: flex-start;
+    margin-top: 8px;
+}
+
+.property-card {
+    background: #e0e5ec !important;
+    border: none !important;
+    border-radius: 20px;
+    padding: 20px;
+    margin-bottom: 12px;
+    box-shadow: 12px 12px 35px #c2c8d0, -12px -12px 35px #ffffff;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.property-card:hover {
+    background: #d6dce4;
+    transform: translateY(-1px);
 }
 
 /* Moved Out Tenant Styling */
@@ -1202,19 +1226,32 @@ input:focus, textarea:focus, select:focus {
 
 /* ===== PROPERTY STYLES ===== */
 .property-card {
-    background: #e0e5ec;
-    border: none;
+    background: #e0e5ec !important;
+    border: none !important;
     border-radius: 20px;
     padding: 20px;
     margin-bottom: 12px;
-    box-shadow: 10px 10px 30px #c2c8d0, -10px -10px 30px #ffffff;
+    box-shadow: 12px 12px 35px #c2c8d0, -12px -12px 35px #ffffff;
     cursor: pointer;
     transition: all 0.3s ease;
+    position: relative;
 }
 
 .property-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 12px 12px 35px #c2c8d0, -12px -12px 35px #ffffff;
+    transform: translateY(-3px);
+    box-shadow: 15px 15px 40px #c2c8d0, -15px -15px 40px #ffffff;
+}
+
+.property-card:active {
+    transform: translateY(-1px);
+    box-shadow: inset 6px 6px 12px #bec4cb, inset -6px -6px 12px #f0f5fa;
+}
+
+/* Force neuromorphic style on all property cards */
+#propertiesList .property-card {
+    background: #e0e5ec !important;
+    box-shadow: 12px 12px 35px #c2c8d0, -12px -12px 35px #ffffff !important;
+    border: none !important;
 }
 
 .property-header {
