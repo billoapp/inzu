@@ -434,72 +434,42 @@
                 <div id="monthlyBackButton" style="display: none; margin-bottom: 16px;">
                     <button class="btn btn-secondary" onclick="backToProperties()">← Back to Properties</button>
                 </div>
-                
-                <div class="form-card">
-                    <h3>Record Monthly Payment</h3>
-                    <form id="monthlyForm">
-                        <div class="form-group">
-                            <label for="monthlyTenant">Select Tenant</label>
-                            <select id="monthlyTenant" name="monthlyTenant" required>
-                                <option value="">Choose a tenant...</option>
-                            </select>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="monthlyAmount">Amount (Ksh)</label>
-                                <input type="number" id="monthlyAmount" name="monthlyAmount" placeholder="50000" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="monthlyDate">Date</label>
-                                <input type="date" id="monthlyDate" name="monthlyDate" required>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label for="monthlyNotes">Notes</label>
-                            <input type="text" id="monthlyNotes" name="monthlyNotes" placeholder="Payment method, etc.">
-                        </div>
-                        <div class="form-actions">
-                            <button type="button" id="monthlyCancelBtn" class="btn btn-secondary" style="display: none;">Cancel</button>
-                            <button type="submit" class="btn btn-success btn-full">Record Payment</button>
-                        </div>
-                    </form>
-                </div>
 
-                <!-- Monthly Edit Overlay -->
-                <div id="monthlyEditOverlay" class="edit-overlay hidden">
-                    <div class="edit-page">
-                        <div class="form-card">
-                            <h3 id="monthlyFormTitle">Record Monthly Payment</h3>
-                            <form id="monthlyEditForm">
+                <!-- Toggle for the add-monthly form -->
+                <button class="toggle-btn" id="monthlyToggleBtn" onclick="toggleMonthlyForm()">➕ Record Payment</button>
+                
+                <!-- Add Monthly Form (collapsible) -->
+                <div id="monthlyFormCollapsible" class="collapsed" style="overflow: hidden; transition: max-height 0.3s ease, opacity 0.3s ease; max-height: 0; opacity: 0;">
+                    <div class="form-card">
+                        <h3>Record Monthly Payment</h3>
+                        <form id="monthlyForm">
+                            <div class="form-group">
+                                <label for="monthlyTenant">Select Tenant</label>
+                                <select id="monthlyTenant" name="monthlyTenant" required>
+                                    <option value="">Choose a tenant...</option>
+                                </select>
+                            </div>
+                            <div class="form-row">
                                 <div class="form-group">
-                                    <label for="monthlyTenantEdit">Select Tenant</label>
-                                    <select id="monthlyTenantEdit" name="monthlyTenant" required>
-                                        <option value="">Choose a tenant...</option>
-                                    </select>
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label for="monthlyAmountEdit">Amount (Ksh)</label>
-                                        <input type="number" id="monthlyAmountEdit" name="monthlyAmount" placeholder="50000" required>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="monthlyDateEdit">Date</label>
-                                        <input type="date" id="monthlyDateEdit" name="monthlyDate" required>
-                                    </div>
+                                    <label for="monthlyAmount">Amount (Ksh)</label>
+                                    <input type="number" id="monthlyAmount" name="monthlyAmount" placeholder="50000" required>
                                 </div>
                                 <div class="form-group">
-                                    <label for="monthlyNotesEdit">Notes</label>
-                                    <input type="text" id="monthlyNotesEdit" name="monthlyNotes" placeholder="Payment method, etc.">
+                                    <label for="monthlyDate">Date</label>
+                                    <input type="date" id="monthlyDate" name="monthlyDate" required>
                                 </div>
-                                <div class="form-actions">
-                                    <button type="button" id="monthlyCancelBtn" class="btn btn-secondary">Cancel</button>
-                                    <button type="submit" class="btn btn-success btn-full">Record Payment</button>
-                                </div>
-                            </form>
-                        </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="monthlyNotes">Notes</label>
+                                <input type="text" id="monthlyNotes" name="monthlyNotes" placeholder="Payment method, etc.">
+                            </div>
+                            <div class="form-actions">
+                                <button type="button" class="btn btn-secondary" onclick="toggleMonthlyForm()">Cancel</button>
+                                <button type="submit" class="btn btn-success btn-full">Record Payment</button>
+                            </div>
+                        </form>
                     </div>
                 </div>
-                <!-- End Monthly Edit Overlay -->
 
                 <div class="entries-list" id="monthlyList">
                     <div class="empty-state">
@@ -524,90 +494,51 @@
                 <div id="expensesBackButton" style="display: none; margin-bottom: 16px;">
                     <button class="btn btn-secondary" onclick="backToProperties()">← Back to Properties</button>
                 </div>
-                
-                <div class="form-card">
-                    <h3>Add Expense</h3>
-                    <form id="expenseForm">
-                        <div class="form-group">
-                            <label for="expenseCategory">Category</label>
-                            <select id="expenseCategory" name="expenseCategory" required>
-                                <option value="">Select category...</option>
-                                <option value="maintenance">Maintenance</option>
-                                <option value="utilities">Utilities</option>
-                                <option value="insurance">Insurance</option>
-                                <option value="taxes">Property Taxes</option>
-                                <option value="other">Other</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="expenseDescription">Description</label>
-                            <input type="text" id="expenseDescription" name="expenseDescription" placeholder="What was this expense for?" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="expenseReference">Reference (optional)</label>
-                            <input type="text" id="expenseReference" name="expenseReference" placeholder="Invoice #, receipt ref, vendor...">
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="expenseAmount">Amount (Ksh)</label>
-                                <input type="number" id="expenseAmount" name="expenseAmount" placeholder="25000" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="expenseDate">Date</label>
-                                <input type="date" id="expenseDate" name="expenseDate" required>
-                            </div>
-                        </div>
-                        <div class="form-actions">
-                            <button type="button" id="expenseCancelBtn" class="btn btn-secondary" style="display: none;">Cancel</button>
-                            <button type="submit" class="btn btn-primary btn-full">Add Expense</button>
-                        </div>
-                    </form>
-                </div>
 
-                <!-- Expense Edit Overlay -->
-                <div id="expenseEditOverlay" class="edit-overlay hidden">
-                    <div class="edit-page">
-                        <div class="form-card">
-                            <h3 id="expenseFormTitle">Add Expense</h3>
-                            <form id="expenseEditForm">
+                <!-- Toggle for the add-expense form -->
+                <button class="toggle-btn" id="expenseToggleBtn" onclick="toggleExpenseForm()">➕ Add Expense</button>
+                
+                <!-- Add Expense Form (collapsible) -->
+                <div id="expenseFormCollapsible" class="collapsed" style="overflow: hidden; transition: max-height 0.3s ease, opacity 0.3s ease; max-height: 0; opacity: 0;">
+                    <div class="form-card">
+                        <h3>Add Expense</h3>
+                        <form id="expenseForm">
+                            <div class="form-group">
+                                <label for="expenseCategory">Category</label>
+                                <select id="expenseCategory" name="expenseCategory" required>
+                                    <option value="">Select category...</option>
+                                    <option value="maintenance">Maintenance</option>
+                                    <option value="utilities">Utilities</option>
+                                    <option value="insurance">Insurance</option>
+                                    <option value="taxes">Property Taxes</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="expenseDescription">Description</label>
+                                <input type="text" id="expenseDescription" name="expenseDescription" placeholder="What was this expense for?" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="expenseReference">Reference (optional)</label>
+                                <input type="text" id="expenseReference" name="expenseReference" placeholder="Invoice #, receipt ref, vendor...">
+                            </div>
+                            <div class="form-row">
                                 <div class="form-group">
-                                    <label for="expenseCategoryEdit">Category</label>
-                                    <select id="expenseCategoryEdit" name="expenseCategory" required>
-                                        <option value="">Select category...</option>
-                                        <option value="maintenance">Maintenance</option>
-                                        <option value="utilities">Utilities</option>
-                                        <option value="insurance">Insurance</option>
-                                        <option value="taxes">Property Taxes</option>
-                                        <option value="other">Other</option>
-                                    </select>
+                                    <label for="expenseAmount">Amount (Ksh)</label>
+                                    <input type="number" id="expenseAmount" name="expenseAmount" placeholder="25000" required>
                                 </div>
                                 <div class="form-group">
-                                    <label for="expenseDescriptionEdit">Description</label>
-                                    <input type="text" id="expenseDescriptionEdit" name="expenseDescription" placeholder="What was this expense for?" required>
+                                    <label for="expenseDate">Date</label>
+                                    <input type="date" id="expenseDate" name="expenseDate" required>
                                 </div>
-                                <div class="form-group">
-                                    <label for="expenseReferenceEdit">Reference (optional)</label>
-                                    <input type="text" id="expenseReferenceEdit" name="expenseReference" placeholder="Invoice #, receipt ref, vendor...">
-                                </div>
-                                <div class="form-row">
-                                    <div class="form-group">
-                                        <label for="expenseAmountEdit">Amount (Ksh)</label>
-                                        <input type="number" id="expenseAmountEdit" name="expenseAmount" placeholder="25000" required>
-                                    </div>
-                                    <div class="form-group">
-                                        <label for="expenseDateEdit">Date</label>
-                                        <input type="date" id="expenseDateEdit" name="expenseDate" required>
-                                    </div>
-                                </div>
-                                <div class="form-actions">
-                                    <button type="button" id="expenseCancelBtn" class="btn btn-secondary">Cancel</button>
-                                    <button type="submit" class="btn btn-primary btn-full">Add Expense</button>
-                                </div>
-                            </form>
-                        </div>
+                            </div>
+                            <div class="form-actions">
+                                <button type="button" class="btn btn-secondary" onclick="toggleExpenseForm()">Cancel</button>
+                                <button type="submit" class="btn btn-primary btn-full">Add Expense</button>
+                            </div>
+                        </form>
                     </div>
                 </div>
-                <!-- End Expense Edit Overlay -->
 
                 <div class="entries-list" id="expensesList">
                     <div class="empty-state">

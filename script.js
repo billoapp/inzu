@@ -1000,12 +1000,42 @@ function selectProperty(propertyId) {
         tenantToggleBtn.style.display = 'inline-flex';
     }
     
+    // Update: Monthly toggle button with property name
+    const monthlyToggleBtn = document.getElementById('monthlyToggleBtn');
+    if (monthlyToggleBtn) {
+        monthlyToggleBtn.textContent = `➕ Record Payment - ${property.name}`;
+        monthlyToggleBtn.style.display = 'inline-flex';
+    }
+    
+    // Update: Expense toggle button with property name
+    const expenseToggleBtn = document.getElementById('expenseToggleBtn');
+    if (expenseToggleBtn) {
+        expenseToggleBtn.textContent = `➕ Add Expense - ${property.name}`;
+        expenseToggleBtn.style.display = 'inline-flex';
+    }
+    
     // Keep: Add tenant form COLLAPSED by default
     const tenantFormCollapsible = document.getElementById('tenantFormCollapsible');
     if (tenantFormCollapsible) {
         tenantFormCollapsible.style.maxHeight = '0';
         tenantFormCollapsible.style.opacity = '0';
         tenantFormCollapsible.classList.add('collapsed');
+    }
+    
+    // Keep: Monthly form COLLAPSED by default
+    const monthlyFormCollapsible = document.getElementById('monthlyFormCollapsible');
+    if (monthlyFormCollapsible) {
+        monthlyFormCollapsible.style.maxHeight = '0';
+        monthlyFormCollapsible.style.opacity = '0';
+        monthlyFormCollapsible.classList.add('collapsed');
+    }
+    
+    // Keep: Expense form COLLAPSED by default
+    const expenseFormCollapsible = document.getElementById('expenseFormCollapsible');
+    if (expenseFormCollapsible) {
+        expenseFormCollapsible.style.maxHeight = '0';
+        expenseFormCollapsible.style.opacity = '0';
+        expenseFormCollapsible.classList.add('collapsed');
     }
     
     // Show: Tenants list
@@ -1087,6 +1117,18 @@ function backToProperties() {
     if (tenantToggleBtn) {
         tenantToggleBtn.textContent = '➕ Add New Tenant';
         tenantToggleBtn.style.display = 'none';
+    }
+    
+    // Hide: Monthly toggle button
+    const monthlyToggleBtn = document.getElementById('monthlyToggleBtn');
+    if (monthlyToggleBtn) {
+        monthlyToggleBtn.style.display = 'none';
+    }
+    
+    // Hide: Expense toggle button
+    const expenseToggleBtn = document.getElementById('expenseToggleBtn');
+    if (expenseToggleBtn) {
+        expenseToggleBtn.style.display = 'none';
     }
     
     // Collapse: Add tenant form
@@ -1455,6 +1497,16 @@ function initializeNavigation() {
         tenantFormCollapsible.style.opacity = '0';
         tenantFormCollapsible.classList.add('collapsed');
     }
+    
+    // Hide toggle buttons
+    const tenantToggleBtn = document.getElementById('tenantToggleBtn');
+    if (tenantToggleBtn) tenantToggleBtn.style.display = 'none';
+    
+    const monthlyToggleBtn = document.getElementById('monthlyToggleBtn');
+    if (monthlyToggleBtn) monthlyToggleBtn.style.display = 'none';
+    
+    const expenseToggleBtn = document.getElementById('expenseToggleBtn');
+    if (expenseToggleBtn) expenseToggleBtn.style.display = 'none';
     
     // Show the properties tab content by default
     showTab('property');
@@ -1924,7 +1976,7 @@ function toggleMonthlyForm() {
         el.classList.remove('collapsed');
         el.style.maxHeight = el.scrollHeight + 'px';
         el.style.opacity = '1';
-        if (btn) btn.textContent = '➖ Hide Add Monthly Receipt';
+        if (btn) btn.textContent = '➖ Hide Record Payment';
         
         // Populate tenant dropdown
         updateTenantSelects();
@@ -1935,7 +1987,7 @@ function toggleMonthlyForm() {
             el.style.maxHeight = '0';
             el.style.opacity = '0';
         });
-        if (btn) btn.textContent = '➕ Add Monthly Receipt';
+        if (btn) btn.textContent = '➕ Record Payment';
     }
 }
 
