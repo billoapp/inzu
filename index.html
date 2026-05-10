@@ -7,9 +7,22 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="logo.png">
     <link rel="stylesheet" href="styles.css">
-    <script type="module" src="script.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.20.0/xlsx.full.min.js"></script>
+    <script src="script.js"></script>
 </head>
 <body>
+    <!-- Sync Status Bar -->
+    <div id="syncStatus" class="sync-status">
+        <div class="sync-progress"></div>
+    </div>
+    
     <!-- Splash Screen -->
     <div id="splashContainer" class="splash-container">
         <img src="icon-512.png" alt="Inzu" class="splash-logo">
@@ -73,14 +86,18 @@
                 </div>
                 <ul class="slideout-menu">
                     <li>
-                        <button onclick="exportData(); closeUserMenu();">
-                            <span>📤</span> Export JSON
+                        <button onclick="showPropertyExportDialog(); closeUserMenu();">
+                            <span>?</span> Export Property
                         </button>
                     </li>
+                    <li class="menu-divider"></li>
                     <li>
-                        <button onclick="exportCSV(); closeUserMenu();">
-                            <span>📊</span> Export CSV
-                        </button>
+                        <div class="toggle-switch" id="autoUpdateToggle" onclick="toggleAutoUpdate();">
+                            <div class="toggle-label">
+                                <span>?</span> Auto-Update
+                            </div>
+                            <div class="toggle-slider"></div>
+                        </div>
                     </li>
                     <li class="menu-divider"></li>
                     <li>
@@ -95,7 +112,12 @@
                     </li>
                     <li>
                         <button onclick="showDataInfo(); closeUserMenu();">
-                            <span>📊</span> Data Collection
+                            <span>?</span> Data Collection
+                        </button>
+                    </li>
+                    <li>
+                        <button class="logout" onclick="logoutUser()">
+                            <span>�</span> Sign Out
                         </button>
                     </li>
                     <li>
@@ -104,14 +126,10 @@
                         </button>
                     </li>
                     <li class="menu-divider"></li>
-                    <li class="menu-disclaimer">
+                    <li class="menu-divider"></li>
+                    <li class="menu-divider">
                         <small>No liability for data loss or inaccuracies.</small><br>
                         <small>&copy; 2026 Bonga Talk Research Ltd</small>
-                    </li>
-                    <li>
-                        <button class="logout" onclick="logoutUser()">
-                            <span>🚪</span> Sign Out
-                        </button>
                     </li>
                 </ul>
             </div>
@@ -570,7 +588,9 @@
                                     <option value="">Select category...</option>
                                     <option value="maintenance">Maintenance</option>
                                     <option value="utilities">Utilities</option>
-                                    <option value="insurance">Insurance</option>
+                                    <option value="salaries">Salaries</option>
+                                    <option value="school">School</option>
+                                    <option value="shopping">Shopping</option>
                                     <option value="taxes">Property Taxes</option>
                                     <option value="other">Other</option>
                                 </select>
@@ -613,7 +633,9 @@
                                         <option value="">Select category...</option>
                                         <option value="maintenance">Maintenance</option>
                                         <option value="utilities">Utilities</option>
-                                        <option value="insurance">Insurance</option>
+                                        <option value="salaries">Salaries</option>
+                                        <option value="school">School</option>
+                                        <option value="shopping">Shopping</option>
                                         <option value="taxes">Property Taxes</option>
                                         <option value="other">Other</option>
                                     </select>
@@ -671,7 +693,12 @@
                 </div>
 
                 <div class="form-card">
-                    <h3>📊 Summary Report</h3>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h3>📊 Summary Report</h3>
+                        <button class="btn btn-success" onclick="captureSummaryScreenshot()" style="padding: 8px 16px; font-size: 14px;">
+                            📸 Screenshot
+                        </button>
+                    </div>
                     <div class="summary-cards" id="summaryCards">
                         <div class="summary-card">
                             <h4>Total Income</h4>
@@ -986,6 +1013,152 @@
                 </div>
                 
                 <p><strong>Last updated: February 2026</strong></p>
+            </div>
+        </div>
+    </div>
+
+<!-- Property Export Dialog -->
+    <div id="propertyExportDialog" class="export-dialog-overlay" style="display: none;">
+        <div class="export-dialog">
+            <div class="export-dialog-header">
+                <h3>Export Property Data</h3>
+                <button class="export-dialog-close" onclick="closePropertyExportDialog()">×</button>
+            </div>
+            <div class="export-dialog-content">
+                <div class="export-section">
+                    <h4>Select Property</h4>
+                    <select id="exportPropertySelect" onchange="handlePropertySelection()">
+                        <option value="">Choose a property...</option>
+                    </select>
+                </div>
+                
+                <!-- Export Tabs (shown after property selection) -->
+                <div id="exportTabs" style="display: none;">
+                    <div class="export-tab-buttons">
+                        <button class="export-tab-btn active" onclick="switchExportTab('tenant')" id="tenantTabBtn">
+                            <div> Tenant Statement</div>
+                            <div style="font-size: 0.8em; opacity: 0.7;">Individual tenant</div>
+                        </button>
+                        <button class="export-tab-btn" onclick="switchExportTab('full')" id="fullTabBtn">
+                            <div> Full Accounts</div>
+                            <div style="font-size: 0.8em; opacity: 0.7;">All property data</div>
+                        </button>
+                    </div>
+                    
+                    <!-- Tenant Statement Tab -->
+                    <div id="tenantExportTab" class="export-tab-content active">
+                        <div class="export-section">
+                            <h4>Select Tenant</h4>
+                            <select id="exportTenantSelect">
+                                <option value="">Choose a tenant...</option>
+                            </select>
+                        </div>
+                        
+                        <div class="export-section">
+                            <h4>Export Format</h4>
+                            <div class="export-options">
+                                <button class="btn btn-primary" onclick="exportTenantStatement()" style="width: 100%; margin-bottom: 10px;">
+                                    <div style="text-align: left; display: flex; justify-content: space-between; align-items: center;">
+                                        <div>
+                                            <div style="font-weight: bold; margin-bottom: 4px;">Excel Statement</div>
+                                            <div style="font-size: 0.9em; opacity: 0.8;">Detailed tenant statement</div>
+                                        </div>
+                                        <div style="background: #1f2937; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold;">
+                                            EXCEL (.xlsx)
+                                        </div>
+                                    </div>
+                                </button>
+                                <button class="btn btn-success" onclick="exportTenantStatementImage()" style="width: 100%;">
+                                    <div style="text-align: left; display: flex; justify-content: space-between; align-items: center;">
+                                        <div>
+                                            <div style="font-weight: bold; margin-bottom: 4px;">Image Statement</div>
+                                            <div style="font-size: 0.9em; opacity: 0.8;">Quick share format</div>
+                                        </div>
+                                        <div style="background: #059669; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold;">
+                                            IMAGE (.png)
+                                        </div>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Full Accounts Tab -->
+                    <div id="fullExportTab" class="export-tab-content">
+                        <div class="export-section">
+                            <h4>Export All Data</h4>
+                            <div class="export-options">
+                                <button class="btn btn-secondary" onclick="exportPropertyFull()" style="width: 100%;">
+                                    <div style="text-align: left; display: flex; justify-content: space-between; align-items: center;">
+                                        <div>
+                                            <div style="font-weight: bold; margin-bottom: 4px;">Complete Property Accounts</div>
+                                            <div style="font-size: 0.9em; opacity: 0.8;">Tenants, payments, expenses & summaries</div>
+                                        </div>
+                                        <div style="background: #1f2937; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8em; font-weight: bold;">
+                                            EXCEL (.xlsx)
+                                        </div>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="export-dialog-footer">
+                    <button class="btn btn-secondary" onclick="closePropertyExportDialog()">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Archive Tenant Modal -->
+    <div id="archiveTenantModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content archive-modal">
+            <div class="modal-header">
+                <h3>📦 Archive Tenant</h3>
+                <button class="modal-close" onclick="closeArchiveModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-section">
+                    <h4>Tenant Information</h4>
+                    <div class="tenant-summary" id="archiveTenantSummary">
+                        <!-- Tenant details will be populated here -->
+                    </div>
+                </div>
+                
+                <div class="form-section">
+                    <h4>Archive Details</h4>
+                    <div class="form-group">
+                        <label for="archiveTenantEnd">Date Tenant Left *</label>
+                        <input type="date" id="archiveTenantEnd" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="archiveFinalBillAmount">Final Bill Amount (Ksh)</label>
+                        <input type="number" id="archiveFinalBillAmount" placeholder="0">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="archiveDepositReturned">Deposit Returned (Ksh)</label>
+                        <input type="number" id="archiveDepositReturned" placeholder="0">
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="archiveFinalElectricityReading">Final Electricity Reading</label>
+                            <input type="number" id="archiveFinalElectricityReading" placeholder="0">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="archiveFinalWaterReading">Final Water Reading</label>
+                            <input type="number" id="archiveFinalWaterReading" placeholder="0">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeArchiveModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="confirmArchiveTenant()">Archive Tenant</button>
             </div>
         </div>
     </div>

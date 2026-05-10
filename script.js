@@ -1,15 +1,21 @@
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
-import { getDatabase, ref, set, get, onValue } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
-import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
-import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
-import { firebaseConfig } from './firebase-config.js';
+// Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyC2ed7p5iIOcRNvOErrPcdSoJYrXH4vZIc",
+  authDomain: "inzu-home.firebaseapp.com",
+  databaseURL: "https://inzu-home-default-rtdb.asia-southeast1.firebasedatabase.app/",
+  projectId: "inzu-home",
+  storageBucket: "inzu-home.firebasestorage.app",
+  messagingSenderId: "553581277749",
+  appId: "1:553581277749:web:d78a0fcc231f720e1a777c",
+  measurementId: "G-1CTCRL7LM3"
+};
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const database = getDatabase(app);
-const db = getFirestore(app); // Firestore as backup
-const auth = getAuth(app);
-const googleProvider = new GoogleAuthProvider();
+firebase.initializeApp(firebaseConfig);
+const database = firebase.database();
+const db = firebase.firestore(); // Firestore as backup
+const auth = firebase.auth();
+const googleProvider = new firebase.auth.GoogleAuthProvider();
 
 // Visual Sync Status Bar
 function updateSyncStatus(status) {
@@ -143,14 +149,67 @@ window.originalMoveOutData = null;
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('🔧 DOM loaded, setting initial tab state...');
+    
+    // Initialize forms first
+    initializeForms();
+    
+    // Check authentication status
     checkAuthStatus();
+    
+    // Initialize version display
+    updateVersionDisplay();
+    initializeAutoUpdateMenu();
 });
+
+// Initialize forms and event listeners
+function initializeForms() {
+    console.log('🔧 DOM loaded, initializing forms...');
+    
+    // Check if elements exist before adding listeners
+    const addTenantForm = document.getElementById('addTenantForm');
+    const tenantForm = document.getElementById('tenantForm');
+    const propertyEditForm = document.getElementById('propertyEditForm');
+    
+    if (addTenantForm) {
+        console.log('🔧 addTenantForm found: true');
+        // Add tenant form event listener
+        addTenantForm.addEventListener('submit', addTenant);
+    }
+    
+    if (tenantForm) {
+        console.log('🔧 tenantForm found: true');
+        // Tenant form event listener
+        tenantForm.addEventListener('submit', saveTenant);
+    }
+    
+    if (propertyEditForm) {
+        console.log('🔧 propertyEditForm found: true');
+        // Property edit form event listeners
+        const propertyFields = propertyEditForm.querySelectorAll('input, select, textarea');
+        propertyFields.forEach(field => {
+            field.addEventListener('input', () => {
+                const saveBtn = document.getElementById('updatePropertyBtn');
+                if (saveBtn) saveBtn.disabled = false;
+            });
+        });
+    }
+    
+    // Other button event listeners
+    const monthlyCancelBtn = document.getElementById('monthlyCancelBtn');
+    if (monthlyCancelBtn) {
+        console.log('🔧 monthlyCancelBtn found: true');
+        monthlyCancelBtn.addEventListener('click', cancelMonthlyEdit);
+    }
+    
+    console.log('🚀 Event listeners initialization starting...');
+}
 
 // Check authentication status
 function checkAuthStatus() {
     console.log('🔐 Checking auth status...');
     
-    onAuthStateChanged(auth, (user) => {
+    firebase.auth().onAuthStateChanged((user) => {
         console.log('🔐 Auth state changed:', user ? 'User logged in' : 'No user');
         
         if (user) {
@@ -166,18 +225,8 @@ function checkAuthStatus() {
             // Update user info in slideout
             updateSlideoutUserInfo();
             
-            // Load data using best practices
-            loadData().then((loadedData) => {
-                console.log('📊 Data loaded successfully:', loadedData);
-                console.log('📊 Properties count:', loadedData?.properties?.length || 0);
-                
-                // Clear selectedPropertyId to start fresh (user must click a property to see tabs)
-                // This prevents tabs from showing if they were previously selected
-                if (data.selectedPropertyId) {
-                    console.log('🔄 Clearing selectedPropertyId from saved data');
-                    data.selectedPropertyId = null;
-                    saveData();
-                }
+            // Load data and setup app
+            loadData().then(() => {
                 
                 // Initialize navigation to hide tabs
                 initializeNavigation();
@@ -215,8 +264,8 @@ async function loginWithGoogle() {
         console.log('🔐 Attempting Google Sign-In...');
         
         // Ensure auth persistence is set to local so user remains signed in after refresh
-        await setPersistence(auth, browserLocalPersistence);
-        const result = await signInWithPopup(auth, googleProvider);
+        await firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+        const result = await firebase.auth().signInWithPopup(googleProvider);
         
         console.log('🔐 Sign-In successful:', result.user.email);
         showNotification(`Welcome, ${result.user.displayName || result.user.email}!`);
@@ -243,7 +292,7 @@ async function loginWithGoogle() {
 async function logoutUser() {
     if (confirm('Are you sure you want to logout? Your data is saved to your Google account.')) {
         try {
-            await signOut(auth);
+            await firebase.auth().signOut();
             showToast('Logged out successfully', 'success');
         } catch (error) {
             console.error('Logout error:', error);
@@ -255,27 +304,29 @@ async function logoutUser() {
 // Setup real-time sync with Firebase
 async function setupRealtimeSync() {
     if (!currentUser) return;
-    const dataRef = ref(database, `users/${currentUser.uid}/rentalData`);
+    const dataRef = database.ref(`users/${currentUser.uid}/rentalData`);
 
-    // Only setup realtime sync if we already have data
-    if (data && data.properties && data.properties.length > 0) {
-        console.log('🔄 Setting up realtime sync for existing data...');
-        
-        // Listen for real-time changes
-        onValue(dataRef, (snapshot) => {
-            const firebaseData = snapshot.val();
-            if (firebaseData && JSON.stringify(firebaseData) !== JSON.stringify(data)) {
-                console.log('📥 Data changed in Firebase, updating local...');
+    console.log(' Setting up enhanced realtime sync...');
+    
+    // Always setup realtime sync for automatic updates
+    dataRef.on('value', (snapshot) => {
+        const firebaseData = snapshot.val();
+        if (firebaseData) {
+            // Check if data actually changed
+            if (JSON.stringify(firebaseData) !== JSON.stringify(data)) {
+                console.log(' Data changed in Firebase, updating local...');
                 data = firebaseData;
                 renderAllEntries();
                 updateTenantSelects();
                 updateSummary();
-                showNotification('Data synced from cloud', 'info');
+                showNotification('Data automatically synced', 'success');
+                updateSyncStatus('synced');
             }
-        });
-    } else {
-        console.log('📭 No local data to sync, Firebase sync will be handled by loadData()');
-    }
+        }
+    }, (error) => {
+        console.error(' Real-time sync error:', error);
+        updateSyncStatus('error');
+    });
 }
 
 // Load data with proper priority: Firebase → localStorage → empty
@@ -286,20 +337,12 @@ async function loadData() {
     if (currentUser) {
         console.log('📡 Current user:', currentUser.uid);
         try {
-            // First try user-specific path
-            const userDataRef = ref(database, `users/${currentUser.uid}/rentalData`);
-            console.log('📡 Fetching from Firebase path:', `users/${currentUser.uid}/rentalData`);
-            let snapshot = await get(userDataRef);
+            // Only use user-specific path
+            const userDataRef = database.ref(`users/${currentUser.uid}/rentalData`);
+            console.log(' Fetching from Firebase path:', `users/${currentUser.uid}/rentalData`);
+            const snapshot = await userDataRef.once('value');
             
-            console.log('📡 Firebase user path snapshot exists:', snapshot.exists());
-            
-            if (!snapshot.exists()) {
-                // Try root path for backward compatibility
-                const rootDataRef = ref(database, 'rentalData');
-                console.log('📡 Trying root path: rentalData');
-                snapshot = await get(rootDataRef);
-                console.log('📡 Firebase root path snapshot exists:', snapshot.exists());
-            }
+            console.log(' Firebase user path snapshot exists:', snapshot.exists());
             
             if (snapshot.exists()) {
                 console.log('✅ Loaded data from Firebase');
@@ -568,13 +611,14 @@ function migrateToHierarchicalStructure() {
 
 // Save data with proper redundancy
 function saveData() {
-    // 1. Save to localStorage immediately (fast, reliable)
+    // 1. Save to localStorage (immediate, reliable)
     try {
         localStorage.setItem('inzuData', JSON.stringify(data));
-        localStorage.setItem('lastSaved', new Date().toLocaleString());
-        console.log('✅ Saved to localStorage');
+        console.log(' Data saved to localStorage');
+        showNotification(' Data saved to device', 'success', 2000); // Quick confirmation
     } catch (error) {
-        console.error('❌ Failed to save to localStorage:', error);
+        console.error(' Failed to save to localStorage:', error);
+        showNotification(' Error saving data to device', 'error');
     }
     
     // 2. Save to Firebase in background (async, don't wait)
@@ -596,30 +640,33 @@ async function saveToFirebaseOnly(dataToSave) {
     if (!currentUser) return;
     
     try {
-        console.log('📤 Saving to Firebase...');
+        console.log(' Saving to Firebase...');
         updateSyncStatus('syncing');
         
-        // Save to user-specific path
-        const userDataRef = ref(database, `users/${currentUser.uid}/rentalData`);
-        await set(userDataRef, dataToSave);
-        console.log('✅ Data saved to Firebase user path');
-        
-        // Also save to root path for backward compatibility
-        const rootDataRef = ref(database, 'rentalData');
-        await set(rootDataRef, dataToSave);
-        console.log('✅ Data saved to Firebase root path');
+        // Save to user-specific path only
+        const userDataRef = database.ref(`users/${currentUser.uid}/rentalData`);
+        await userDataRef.set(dataToSave);
+        console.log(' Data saved to Firebase user path');
         
         updateSyncStatus('synced');
         
     } catch (error) {
-        console.error('❌ Firebase save failed:', error);
+        console.error(' Firebase save failed:', error);
         updateSyncStatus('error');
         
-        if (error.code === 'unavailable') {
-            showNotification('⚠️ No internet connection - Data saved locally only', 'warning');
+        // Show appropriate message based on error type
+        if (error.code === 'PERMISSION_DENIED') {
+            showNotification(' Cloud backup permission issue - Data saved locally', 'warning');
+        } else if (error.code === 'unavailable') {
+            showNotification(' No internet connection - Data saved locally only', 'info');
         } else {
-            showNotification('⚠️ Cloud backup failed - Data saved locally', 'warning');
+            showNotification(' Cloud backup failed - Data saved locally', 'warning');
         }
+        
+        // Show local save success
+        setTimeout(() => {
+            showNotification(' Data saved successfully to device', 'success');
+        }, 2000);
     }
 }
 
@@ -636,48 +683,10 @@ window.addEventListener('offline', () => {
 });
 
 // PWA Auto-Update Detection with User Permission
+// Service worker registration is handled in the main DOMContentLoaded listener
+
+// Listen for controlling service worker changes
 if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-            .then(reg => {
-                console.log('Service Worker registered with scope:', reg.scope);
-                
-                // Check for updates immediately on load
-                reg.update();
-                
-                // Check for updates every 60 seconds
-                setInterval(() => {
-                    reg.update();
-                }, 60000);
-
-                // Listen for new service worker
-                reg.addEventListener('updatefound', () => {
-                    const newWorker = reg.installing;
-                    console.log('New service worker found');
-                    
-                    newWorker.addEventListener('statechange', () => {
-                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                            console.log('New service worker installed and ready');
-                            showUpdatePrompt();
-                        }
-                    });
-                });
-                
-                // Check if there's already a waiting service worker (update available)
-                if (reg.waiting) {
-                    console.log('Service worker already waiting - update available');
-                    showUpdatePrompt();
-                }
-                
-                // Store registration for version checking
-                window.swRegistration = reg;
-            })
-            .catch(error => {
-                console.error('Service Worker registration failed:', error);
-            });
-    });
-
-    // Listen for controlling service worker changes
     navigator.serviceWorker.addEventListener('controllerchange', () => {
         console.log('Service worker controller changed - reloading page');
         window.location.reload();
@@ -692,6 +701,39 @@ document.addEventListener('visibilitychange', () => {
     }
 });
 
+// Auto-update setting
+let autoUpdateEnabled = localStorage.getItem('autoUpdateEnabled') === 'true'; // Default to false (manual updates)
+
+// Toggle auto-update setting
+function toggleAutoUpdate() {
+    autoUpdateEnabled = !autoUpdateEnabled;
+    localStorage.setItem('autoUpdateEnabled', autoUpdateEnabled.toString());
+    
+    // Update toggle switch UI
+    const toggleElement = document.getElementById('autoUpdateToggle');
+    if (toggleElement) {
+        if (autoUpdateEnabled) {
+            toggleElement.classList.add('active');
+        } else {
+            toggleElement.classList.remove('active');
+        }
+    }
+    
+    showNotification(`Auto-update ${autoUpdateEnabled ? 'enabled' : 'disabled'}`, 'info');
+}
+
+// Initialize auto-update toggle
+function initializeAutoUpdateMenu() {
+    const toggleElement = document.getElementById('autoUpdateToggle');
+    if (toggleElement) {
+        if (autoUpdateEnabled) {
+            toggleElement.classList.add('active');
+        } else {
+            toggleElement.classList.remove('active');
+        }
+    }
+}
+
 // Show update prompt to user
 function showUpdatePrompt() {
     // Show update status in menu
@@ -701,24 +743,71 @@ function showUpdatePrompt() {
     if (updateStatus) updateStatus.classList.remove('hidden');
     if (updateButton) updateButton.classList.remove('hidden');
     
-    // Also show the floating prompt (existing behavior)
+    // Check if there's already an update prompt showing
+    if (document.querySelector('.update-prompt')) {
+        return; // Don't show multiple prompts
+    }
+    
+    // Create update prompt
     const updatePrompt = document.createElement('div');
     updatePrompt.className = 'update-prompt';
-    updatePrompt.innerHTML = `
-        <div class="update-prompt-content">
-            <div class="update-prompt-icon">🔄</div>
-            <div class="update-prompt-text">
-                <strong>App Update Available</strong>
-                <p>A new version of Inzu is ready with improvements and bug fixes.</p>
-            </div>
-            <div class="update-prompt-actions">
-                <button class="btn btn-secondary" onclick="dismissUpdate(this)">Later</button>
-                <button class="btn btn-primary" onclick="applyUpdate()">Update Now</button>
-            </div>
-        </div>
-    `;
     
-    document.body.appendChild(updatePrompt);
+    if (autoUpdateEnabled) {
+        // Auto-update enabled - show countdown
+        let countdownSeconds = 10;
+        
+        updatePrompt.innerHTML = `
+            <div class="update-prompt-content">
+                <div class="update-prompt-icon">?</div>
+                <div class="update-prompt-text">
+                    <strong>App Update Available</strong>
+                    <p>A new version of Inzu is ready with improvements and bug fixes.</p>
+                    <p class="update-countdown">Auto-updating in <span id="updateCountdown">${countdownSeconds}</span> seconds...</p>
+                </div>
+                <div class="update-prompt-actions">
+                    <button class="btn btn-secondary" onclick="dismissUpdate(this)">Later</button>
+                    <button class="btn btn-primary" onclick="applyUpdate()">Update Now</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(updatePrompt);
+        
+        // Start countdown for automatic update
+        const countdownInterval = setInterval(() => {
+            countdownSeconds--;
+            const countdownEl = document.getElementById('updateCountdown');
+            if (countdownEl) {
+                countdownEl.textContent = countdownSeconds;
+            }
+            
+            if (countdownSeconds <= 0) {
+                clearInterval(countdownInterval);
+                applyUpdate();
+            }
+        }, 1000);
+        
+        // Store interval reference for cleanup
+        updatePrompt.countdownInterval = countdownInterval;
+    } else {
+        // Auto-update disabled - show manual prompt only
+        updatePrompt.innerHTML = `
+            <div class="update-prompt-content">
+                <div class="update-prompt-icon">?</div>
+                <div class="update-prompt-text">
+                    <strong>App Update Available</strong>
+                    <p>A new version of Inzu is ready with improvements and bug fixes.</p>
+                    <p>Update when you're ready - your work won't be interrupted.</p>
+                </div>
+                <div class="update-prompt-actions">
+                    <button class="btn btn-secondary" onclick="dismissUpdate(this)">Later</button>
+                    <button class="btn btn-primary" onclick="applyUpdate()">Update Now</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(updatePrompt);
+    }
     
     // Auto-show the prompt with animation
     setTimeout(() => {
@@ -825,6 +914,7 @@ window.diagnoseButtonVisibility = diagnoseButtonVisibility;
 // Initialize version display when page loads
 document.addEventListener('DOMContentLoaded', () => {
     updateVersionDisplay();
+    initializeAutoUpdateMenu();
     
     // Immediately ensure property tab is shown and navigation is hidden
     console.log('🔧 DOM loaded, setting initial tab state...');
@@ -860,6 +950,9 @@ document.addEventListener('DOMContentLoaded', () => {
 // Dismiss update prompt
 function dismissUpdate(button) {
     const prompt = button.closest('.update-prompt');
+    if (prompt.countdownInterval) {
+        clearInterval(prompt.countdownInterval);
+    }
     prompt.classList.remove('show');
     setTimeout(() => {
         prompt.remove();
@@ -991,13 +1084,827 @@ function updatePropertyHeaderColors(property) {
 
 // ===== PROPERTY MANAGEMENT FUNCTIONS =====
 function showAddPropertyForm() {
-    document.getElementById('addPropertyForm').style.display = 'block';
+    document.getElementById('addPropertyForm').classList.remove('hidden');
     document.getElementById('propertyName').focus();
 }
 
 function hideAddPropertyForm() {
-    document.getElementById('addPropertyForm').style.display = 'none';
+    document.getElementById('addPropertyForm').classList.add('hidden');
     document.getElementById('propertyForm').reset();
+}
+
+function selectProperty(propertyId) {
+    console.log(' selectProperty called with propertyId:', propertyId, 'type:', typeof propertyId);
+    
+    // Convert to number to ensure consistent type comparison
+    const numericPropertyId = typeof propertyId === 'string' ? parseInt(propertyId) : propertyId;
+    
+    const property = data.properties.find(p => p.id === numericPropertyId);
+    if (property) {
+        data.selectedPropertyId = numericPropertyId;
+        saveData();
+        
+        // Hide property cards and show property navigation
+        const propertyCards = document.querySelectorAll('.property-card');
+        propertyCards.forEach(card => card.style.display = 'none');
+        
+        const propertyHeaderCard = document.getElementById('propertyHeaderCard');
+        if (propertyHeaderCard) propertyHeaderCard.style.display = 'none';
+        
+        const propertiesList = document.getElementById('propertiesList');
+        if (propertiesList) propertiesList.style.display = 'none';
+        
+        // Show property navigation
+        const propNav = document.getElementById('propertyNavigation');
+        if (propNav) propNav.style.display = 'flex';
+        
+        // Show the tenants tab and its content
+        showTab('tenants');
+        updateTenantSelects();
+        updateSummary();
+        renderAllEntries();
+        
+        // Update property headers with property info
+        updatePropertyHeaders(property);
+    }
+}
+
+// Update property headers with property information
+function updatePropertyHeaders(property) {
+    // Update tenants tab header
+    const tenantsPropertyHeader = document.getElementById('tenantsPropertyHeader');
+    if (tenantsPropertyHeader) {
+        tenantsPropertyHeader.style.display = 'block';
+        const tenantsPropertyName = document.getElementById('tenantsPropertyName');
+        const tenantsPropertyAddress = document.getElementById('tenantsPropertyAddress');
+        if (tenantsPropertyName) tenantsPropertyName.textContent = property.name || 'Property';
+        if (tenantsPropertyAddress) tenantsPropertyAddress.textContent = property.address || '';
+    }
+    
+    // Update monthly tab header
+    const monthlyPropertyHeader = document.getElementById('monthlyPropertyHeader');
+    if (monthlyPropertyHeader) {
+        monthlyPropertyHeader.style.display = 'block';
+        const monthlyPropertyName = document.getElementById('monthlyPropertyName');
+        const monthlyPropertyAddress = document.getElementById('monthlyPropertyAddress');
+        if (monthlyPropertyName) monthlyPropertyName.textContent = property.name || 'Property';
+        if (monthlyPropertyAddress) monthlyPropertyAddress.textContent = property.address || '';
+    }
+    
+    // Update expenses tab header
+    const expensesPropertyHeader = document.getElementById('expensesPropertyHeader');
+    if (expensesPropertyHeader) {
+        expensesPropertyHeader.style.display = 'block';
+        const expensesPropertyName = document.getElementById('expensesPropertyName');
+        const expensesPropertyAddress = document.getElementById('expensesPropertyAddress');
+        if (expensesPropertyName) expensesPropertyName.textContent = property.name || 'Property';
+        if (expensesPropertyAddress) expensesPropertyAddress.textContent = property.address || '';
+    }
+    
+    // Update summary tab header
+    const summaryPropertyHeader = document.getElementById('summaryPropertyHeader');
+    if (summaryPropertyHeader) {
+        summaryPropertyHeader.style.display = 'block';
+        const summaryPropertyName = document.getElementById('summaryPropertyName');
+        const summaryPropertyAddress = document.getElementById('summaryPropertyAddress');
+        if (summaryPropertyName) summaryPropertyName.textContent = property.name || 'Property';
+        if (summaryPropertyAddress) summaryPropertyAddress.textContent = property.address || '';
+    }
+    
+    // Show back buttons
+    const backButtons = ['tenantsBackButton', 'monthlyBackButton', 'expensesBackButton', 'summaryBackButton'];
+    backButtons.forEach(btnId => {
+        const btn = document.getElementById(btnId);
+        if (btn) btn.style.display = 'block';
+    });
+    
+    // Show action buttons
+    const tenantToggleBtn = document.getElementById('tenantToggleBtn');
+    if (tenantToggleBtn) {
+        tenantToggleBtn.textContent = 'Add New Tenant';
+        tenantToggleBtn.style.display = 'inline-flex';
+    }
+    
+    const monthlyToggleBtn = document.getElementById('monthlyToggleBtn');
+    if (monthlyToggleBtn) {
+        monthlyToggleBtn.textContent = 'Record Payment';
+        monthlyToggleBtn.style.display = 'inline-flex';
+    }
+    
+    const expenseToggleBtn = document.getElementById('expenseToggleBtn');
+    if (expenseToggleBtn) {
+        expenseToggleBtn.textContent = 'Add Expense';
+        expenseToggleBtn.style.display = 'inline-flex';
+    }
+}
+
+// ===== PROPERTY EXPORT FUNCTIONS =====
+function showPropertyExportDialog() {
+    const dialog = document.getElementById('propertyExportDialog');
+    const propertySelect = document.getElementById('exportPropertySelect');
+    const tenantSelect = document.getElementById('exportTenantSelect');
+    const exportTabs = document.getElementById('exportTabs');
+    
+    // Clear previous options
+    propertySelect.innerHTML = '<option value="">Choose a property...</option>';
+    tenantSelect.innerHTML = '<option value="">Choose a tenant...</option>';
+    
+    // Hide tabs initially
+    exportTabs.style.display = 'none';
+    
+    // Populate property select
+    data.properties.forEach(property => {
+        const option = document.createElement('option');
+        option.value = property.id;
+        option.textContent = property.name;
+        propertySelect.appendChild(option);
+    });
+    
+    // Pre-select current property if one is selected
+    if (data.selectedPropertyId) {
+        propertySelect.value = data.selectedPropertyId;
+        handlePropertySelection();
+    }
+    
+    dialog.style.display = 'flex';
+}
+
+// Handle property selection and show tabs
+function handlePropertySelection() {
+    const propertyId = document.getElementById('exportPropertySelect').value;
+    const exportTabs = document.getElementById('exportTabs');
+    const tenantSelect = document.getElementById('exportTenantSelect');
+    
+    if (propertyId) {
+        // Show tabs
+        exportTabs.style.display = 'block';
+        
+        // Populate tenant select for tenant tab
+        populateTenantSelect(propertyId);
+        
+        // Reset to tenant tab
+        switchExportTab('tenant');
+    } else {
+        // Hide tabs if no property selected
+        exportTabs.style.display = 'none';
+    }
+}
+
+// Switch between export tabs
+function switchExportTab(tabName) {
+    const tenantTab = document.getElementById('tenantExportTab');
+    const fullTab = document.getElementById('fullExportTab');
+    const tenantBtn = document.getElementById('tenantTabBtn');
+    const fullBtn = document.getElementById('fullTabBtn');
+    
+    // Remove active class from all tabs and buttons
+    tenantTab.classList.remove('active');
+    fullTab.classList.remove('active');
+    tenantBtn.classList.remove('active');
+    fullBtn.classList.remove('active');
+    
+    // Add active class to selected tab and button
+    if (tabName === 'tenant') {
+        tenantTab.classList.add('active');
+        tenantBtn.classList.add('active');
+    } else if (tabName === 'full') {
+        fullTab.classList.add('active');
+        fullBtn.classList.add('active');
+    }
+}
+
+// Populate tenant select based on selected property
+function populateTenantSelect(propertyId) {
+    const tenantSelect = document.getElementById('exportTenantSelect');
+    tenantSelect.innerHTML = '<option value="">Choose a tenant...</option>';
+    
+    if (!propertyId) return;
+    
+    const property = data.properties.find(p => p.id == propertyId);
+    if (property && property.tenants) {
+        property.tenants.forEach(tenant => {
+            const option = document.createElement('option');
+            option.value = tenant.id;
+            option.textContent = `${tenant.name} - Unit ${tenant.unit}`;
+            tenantSelect.appendChild(option);
+        });
+    }
+}
+
+function closePropertyExportDialog() {
+    const dialog = document.getElementById('propertyExportDialog');
+    dialog.style.display = 'none';
+}
+
+function exportTenantStatement() {
+    const propertyId = document.getElementById('exportPropertySelect').value;
+    const tenantId = document.getElementById('exportTenantSelect').value;
+    
+    if (!propertyId) {
+        showNotification('Please select a property first', 'error');
+        return;
+    }
+    
+    if (!tenantId) {
+        showNotification('Please select a tenant first', 'error');
+        return;
+    }
+    
+    const property = data.properties.find(p => p.id == propertyId);
+    const tenant = property.tenants.find(t => t.id == tenantId);
+    
+    if (!property || !tenant) return;
+    
+    // Create Excel workbook for tenant data (single sheet)
+    if (typeof XLSX !== 'undefined') {
+        const workbook = {
+            SheetNames: ['Tenant Accounts'],
+            Sheets: {}
+        };
+        
+        // Tenant data for selected tenant only
+        const tenantData = [
+            ['Property Name', 'Unit', 'Tenant Name', 'Phone', 'Email', 'Rent Amount', 'Tenant Since', 'Tenant End', 'Total Paid', 'Deposit Paid', 'Balance', 'Status']
+        ];
+        
+        const monthlyPayments = property.monthly?.filter(p => p.tenantId == tenant.id) || [];
+        const totalPaid = monthlyPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
+        
+        // Calculate correct balance based on actual rental periods
+        let expectedRent = 0;
+        if (tenant.tenantSince) {
+            const startDate = new Date(tenant.tenantSince);
+            const endDate = tenant.tenantEnd ? new Date(tenant.tenantEnd) : new Date();
+            
+            // Calculate months between dates
+            const monthsDiff = (endDate.getFullYear() - startDate.getFullYear()) * 12 + 
+                           (endDate.getMonth() - startDate.getMonth());
+            
+            expectedRent = tenant.rent * Math.max(0, monthsDiff);
+        }
+        
+        const balance = expectedRent - totalPaid;
+        const status = tenant.depositPaid ? 'Active' : 'Pending';
+        
+        // Helper function to extract payment reference from notes
+        function extractPaymentReference(notes) {
+            if (!notes) return '';
+            // Match CAP text at the beginning of notes (e.g., "CAP12345")
+            const match = notes.match(/^CAP\d+/);
+            return match ? match[0] : '';
+        }
+        
+        // Get all payment references for this tenant
+        const paymentReferences = monthlyPayments
+            .map(payment => extractPaymentReference(payment.notes))
+            .filter(ref => ref !== '')
+            .join(', ');
+        
+        tenantData.push([
+            property.name,
+            tenant.unit,
+            tenant.name,
+            tenant.phone || '',
+            tenant.email || '',
+            Number(tenant.rent || 0).toFixed(2),
+            tenant.tenantSince ? new Date(tenant.tenantSince).toLocaleDateString('en-GB') : '',
+            tenant.tenantEnd ? new Date(tenant.tenantEnd).toLocaleDateString('en-GB') : '',
+            Number(totalPaid || 0).toFixed(2),
+            Number(tenant.depositPaid || 0).toFixed(2),
+            Number(balance || 0).toFixed(2),
+            status
+        ]);
+        
+        // Add payment details rows
+        tenantData.push(['', '', '', '', '', '', '', '', '', '', '']);
+        tenantData.push(['PAYMENT DETAILS', '', '', '', '', '', '', '', '', '', '']);
+        tenantData.push(['Date', 'Amount', 'Reference', 'Notes', '', '', '', '', '', '', '']);
+        
+        // Sort payments by date (most recent first)
+        const sortedPayments = monthlyPayments.sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        sortedPayments.forEach(payment => {
+            const reference = extractPaymentReference(payment.notes);
+            tenantData.push([
+                new Date(payment.date).toLocaleDateString(),
+                Number(payment.amount) || 0,
+                reference,
+                payment.notes || '',
+                '', '', '', '', '', '', ''
+            ]);
+        });
+        
+        const tenantWS = worksheetFromArrayOfArrays(tenantData);
+        workbook.Sheets['Tenant Accounts'] = tenantWS;
+        
+        // Generate Excel file
+        const wbout = XLSX.write(workbook, {bookType: 'xlsx', type: 'binary'});
+        const blob = new Blob([s2ab(wbout)], {type: 'application/octet-stream'});
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${tenant.name}-statement-${new Date().toISOString().split('T')[0]}.xlsx`;
+        link.click();
+        URL.revokeObjectURL(url);
+        
+        closePropertyExportDialog();
+        showNotification('Excel statement (.xlsx) exported successfully for ' + tenant.name + '!');
+    } else {
+        // Fallback to CSV if XLSX not available
+        let csv = 'Property Name,Unit,Tenant Name,Phone,Email,Rent Amount,Tenant Since,Tenant End,Total Paid,Deposit Paid,Balance,Status\n';
+        
+        const monthlyPayments = property.monthly?.filter(p => p.tenantId == tenant.id) || [];
+        const totalPaid = monthlyPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
+        
+        // Calculate correct balance based on actual rental periods
+        let expectedRent = 0;
+        if (tenant.tenantSince) {
+            const startDate = new Date(tenant.tenantSince);
+            const endDate = tenant.tenantEnd ? new Date(tenant.tenantEnd) : new Date();
+            
+            // Calculate months between dates
+            const monthsDiff = (endDate.getFullYear() - startDate.getFullYear()) * 12 + 
+                           (endDate.getMonth() - startDate.getMonth());
+            
+            expectedRent = tenant.rent * Math.max(0, monthsDiff);
+        }
+        
+        const balance = expectedRent - totalPaid;
+        const status = tenant.depositPaid ? 'Active' : 'Pending';
+        
+        // Helper function to extract payment reference from notes
+        function extractPaymentReference(notes) {
+            if (!notes) return '';
+            // Match CAP text at the beginning of notes (e.g., "CAP12345")
+            const match = notes.match(/^CAP\d+/);
+            return match ? match[0] : '';
+        }
+        
+        csv += `"${property.name}","${tenant.unit}","${tenant.name}","${tenant.phone || ''}","${tenant.email || ''}","${Number(tenant.rent || 0).toFixed(2)}","${tenant.tenantSince ? new Date(tenant.tenantSince).toLocaleDateString('en-GB') : ''}","${tenant.tenantEnd ? new Date(tenant.tenantEnd).toLocaleDateString('en-GB') : ''}","${Number(totalPaid || 0).toFixed(2)}","${Number(tenant.depositPaid || 0).toFixed(2)}","${Number(balance || 0).toFixed(2)}","${status}"\n`;
+        
+        // Add payment details
+        csv += '\nPAYMENT DETAILS\n';
+        csv += 'Date,Amount,Reference,Notes\n';
+        
+        // Sort payments by date (most recent first)
+        const sortedPayments = monthlyPayments.sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        sortedPayments.forEach(payment => {
+            const reference = extractPaymentReference(payment.notes);
+            csv += `"${new Date(payment.date).toLocaleDateString()}",${Number(payment.amount) || 0},"${reference}","${payment.notes || ''}"\n`;
+        });
+        
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${tenant.name}-statement-${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+        
+        closePropertyExportDialog();
+        showNotification('CSV statement (.csv) exported successfully for ' + tenant.name + '!');
+    }
+}
+
+function exportTenantStatementImage() {
+    const propertyId = document.getElementById('exportPropertySelect').value;
+    const tenantId = document.getElementById('exportTenantSelect').value;
+    
+    if (!propertyId) {
+        showNotification('Please select a property first', 'error');
+        return;
+    }
+    
+    if (!tenantId) {
+        showNotification('Please select a tenant first', 'error');
+        return;
+    }
+    
+    const property = data.properties.find(p => p.id == propertyId);
+    const tenant = property.tenants.find(t => t.id == tenantId);
+    
+    if (!property || !tenant) return;
+    
+    // Calculate tenant financials
+    const monthlyPayments = property.monthly?.filter(p => p.tenantId == tenant.id) || [];
+    const totalPaid = monthlyPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
+    const balance = (tenant.rent * monthlyPayments.length) - totalPaid;
+    
+    // Create a temporary statement element for screenshot
+    const statementDiv = document.createElement('div');
+    statementDiv.style.cssText = `
+        position: fixed;
+        top: -9999px;
+        left: -9999px;
+        width: 400px;
+        padding: 20px;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        font-family: Arial, sans-serif;
+        color: #333;
+        z-index: 9999;
+    `;
+    
+    // Build statement content
+    let statementHTML = `
+        <h2 style="margin: 0 0 15px 0; color: #2563eb; font-size: 18px;">Tenant Statement</h2>
+        <p style="margin: 5px 0; font-size: 12px; color: #666;">${property.name}</p>
+        <p style="margin: 5px 0; font-size: 12px; color: #666;">${property.address}</p>
+        
+        <div style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 5px;">
+            <h3 style="margin: 0 0 10px 0; font-size: 16px;">${tenant.name}</h3>
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Unit:</strong> ${tenant.unit}</p>
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Phone:</strong> ${tenant.phone || 'N/A'}</p>
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Email:</strong> ${tenant.email || 'N/A'}</p>
+        </div>
+        
+        <div style="margin: 20px 0;">
+            <h4 style="margin: 0 0 10px 0; font-size: 14px;">Financial Summary</h4>
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Monthly Rent:</strong> Ksh ${tenant.rent}</p>
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Total Paid:</strong> Ksh ${totalPaid}</p>
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Balance:</strong> Ksh ${balance}</p>
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Deposit:</strong> Ksh ${tenant.depositPaid || 0}</p>
+        </div>
+        
+        <div style="margin: 20px 0;">
+            <h4 style="margin: 0 0 10px 0; font-size: 14px;">Recent Payments</h4>
+    `;
+    
+    // Add recent payments (last 5)
+    const recentPayments = monthlyPayments.slice(-5).reverse();
+    recentPayments.forEach(payment => {
+        statementHTML += `
+            <p style="margin: 5px 0; font-size: 12px;">
+                ${new Date(payment.date).toLocaleDateString()}: Ksh ${payment.amount}
+                ${payment.notes ? '<br><span style="color: #666; font-size: 11px;">' + payment.notes.substring(0, 50) + '...</span>' : ''}
+            </p>
+        `;
+    });
+    
+    statementHTML += `
+        </div>
+        
+        <div style="margin: 20px 0; padding-top: 15px; border-top: 1px solid #ddd; font-size: 11px; color: #666; text-align: center;">
+            Generated on ${new Date().toLocaleDateString()}
+        </div>
+    `;
+    
+    statementDiv.innerHTML = statementHTML;
+    document.body.appendChild(statementDiv);
+    
+    // Use html2canvas for screenshot if available
+    if (typeof html2canvas !== 'undefined') {
+        html2canvas(statementDiv, {
+            backgroundColor: '#ffffff',
+            scale: 2
+        }).then(canvas => {
+            canvas.toBlob(function(blob) {
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `${tenant.name}-statement-${new Date().toISOString().split('T')[0]}.png`;
+                link.click();
+                URL.revokeObjectURL(url);
+                
+                // Clean up
+                document.body.removeChild(statementDiv);
+                closePropertyExportDialog();
+                showNotification('Image statement (.png) exported successfully for ' + tenant.name + '!');
+            }, 'image/png');
+        }).catch(error => {
+            console.error('Screenshot error:', error);
+            document.body.removeChild(statementDiv);
+            showNotification('Failed to generate screenshot', 'error');
+        });
+    } else {
+        document.body.removeChild(statementDiv);
+        showNotification('Screenshot library not available', 'error');
+    }
+}
+
+function exportPropertyFull() {
+    const propertyId = document.getElementById('exportPropertySelect').value;
+    if (!propertyId) {
+        showNotification('Please select a property first', 'error');
+        return;
+    }
+    
+    const property = data.properties.find(p => p.id == propertyId);
+    if (!property) return;
+    
+    // Create Excel workbook with multiple sheets
+    if (typeof XLSX !== 'undefined') {
+        const workbook = {
+            SheetNames: [],
+            Sheets: {}
+        };
+        
+        // ===== PROPERTY OVERVIEW SHEET =====
+        const propertyData = [
+            ['Property Name', property.name],
+            ['Address', property.address],
+            ['Type', property.type],
+            ['Total Units', property.units],
+            ['Description', property.description || ''],
+            ['', ''],
+            ['Summary Metrics', ''],
+            ['Total Tenants', property.tenants?.length || 0],
+            ['Occupied Units', property.tenants?.filter(t => t.depositPaid).length || 0],
+            ['Vacant Units', property.units - (property.tenants?.filter(t => t.depositPaid).length || 0)],
+        ];
+        
+        const propertyWS = worksheetFromArrayOfArrays(propertyData);
+        workbook.SheetNames.push('Property Overview');
+        workbook.Sheets['Property Overview'] = propertyWS;
+        
+        // ===== TENANT ACCOUNTS SHEET =====
+        if (property.tenants && property.tenants.length > 0) {
+            const tenantData = [
+                ['Unit', 'Tenant Name', 'Phone', 'Email', 'Rent Amount', 'Tenant Since', 'Total Paid', 'Deposit Paid', 'Balance', 'Status']
+            ];
+            
+            property.tenants.forEach(tenant => {
+                const monthlyPayments = property.monthly?.filter(p => p.tenantId == tenant.id) || [];
+                const totalPaid = monthlyPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
+                const balance = (tenant.rent * monthlyPayments.length) - totalPaid;
+                const status = tenant.depositPaid ? 'Active' : 'Pending';
+                
+                // Format date properly
+                const formattedDate = tenant.tenantSince ? new Date(tenant.tenantSince).toLocaleDateString('en-GB') : '';
+                
+                tenantData.push([
+                    tenant.unit,
+                    tenant.name,
+                    tenant.phone || '',
+                    tenant.email || '',
+                    Number(tenant.rent || 0).toFixed(2),
+                    formattedDate,
+                    Number(totalPaid || 0).toFixed(2),
+                    Number(tenant.depositPaid || 0).toFixed(2),
+                    Number(balance || 0).toFixed(2),
+                    status
+                ]);
+            });
+            
+            const tenantWS = worksheetFromArrayOfArrays(tenantData);
+            workbook.SheetNames.push('Tenant Accounts');
+            workbook.Sheets['Tenant Accounts'] = tenantWS;
+        }
+        
+        // ===== RENT PAYMENT HISTORY SHEET =====
+        if (property.monthly && property.monthly.length > 0) {
+            const paymentData = [
+                ['Payment Date', 'Tenant Name', 'Unit', 'Amount', 'Payment Method', 'Payment Type', 'Notes', 'Status']
+            ];
+            
+            property.monthly.forEach(payment => {
+                const tenant = property.tenants?.find(t => t.id == payment.tenantId);
+                paymentData.push([
+                    payment.date,
+                    tenant ? tenant.name : 'Unknown',
+                    tenant ? tenant.unit : 'N/A',
+                    payment.amount,
+                    payment.method || 'Cash',
+                    'Rent',
+                    payment.notes || '',
+                    'Paid'
+                ]);
+            });
+            
+            const paymentWS = worksheetFromArrayOfArrays(paymentData);
+            workbook.SheetNames.push('Rent Payments');
+            workbook.Sheets['Rent Payments'] = paymentWS;
+        }
+        
+        // ===== EXPENSES SHEET =====
+        if (property.expenses && property.expenses.length > 0) {
+            const expenseData = [
+                ['Expense Date', 'Category', 'Description', 'Amount', 'Reference', 'Status']
+            ];
+            
+            property.expenses.forEach(expense => {
+                expenseData.push([
+                    expense.date,
+                    expense.category,
+                    expense.description,
+                    expense.amount,
+                    expense.reference || '',
+                    'Paid'
+                ]);
+            });
+            
+            const expenseWS = worksheetFromArrayOfArrays(expenseData);
+            workbook.SheetNames.push('Expenses');
+            workbook.Sheets['Expenses'] = expenseWS;
+        }
+        
+        // ===== FINANCIAL SUMMARY SHEET =====
+        const totalIncome = property.monthly?.reduce((sum, payment) => sum + (payment.amount || 0), 0) || 0;
+        const totalExpenses = property.expenses?.reduce((sum, expense) => sum + (expense.amount || 0), 0) || 0;
+        const netIncome = totalIncome - totalExpenses;
+        const totalTenants = property.tenants?.length || 0;
+        const occupiedUnits = property.tenants?.filter(t => t.depositPaid).length || 0;
+        const vacantUnits = property.units - occupiedUnits;
+        const avgRent = totalTenants > 0 ? (property.tenants.reduce((sum, t) => sum + t.rent, 0) / totalTenants).toFixed(0) : 0;
+        
+        const summaryData = [
+            ['Financial Metric', 'Amount', 'Details'],
+            ['Total Income', totalIncome, 'Sum of all rent payments'],
+            ['Total Expenses', totalExpenses, 'Sum of all expenses'],
+            ['Net Income', netIncome, 'Income minus expenses'],
+            ['Occupancy Rate', occupiedUnits + '/' + property.units + ' (' + ((occupiedUnits/property.units)*100).toFixed(1) + '%)', 'Occupied vs total units'],
+            ['Average Rent', avgRent, 'Average rent per tenant'],
+            ['Total Tenants', totalTenants, 'Number of tenants'],
+            ['Vacant Units', vacantUnits, 'Units without tenants'],
+        ];
+        
+        const summaryWS = worksheetFromArrayOfArrays(summaryData);
+        workbook.SheetNames.push('Financial Summary');
+        workbook.Sheets['Financial Summary'] = summaryWS;
+        
+        // Generate Excel file
+        const wbout = XLSX.write(workbook, {bookType: 'xlsx', type: 'binary'});
+        const blob = new Blob([s2ab(wbout)], {type: 'application/octet-stream'});
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${property.name}-full-accounts-${new Date().toISOString().split('T')[0]}.xlsx`;
+        link.click();
+        URL.revokeObjectURL(url);
+        
+        closePropertyExportDialog();
+        showNotification('Excel file (.xlsx) with multiple sheets exported successfully!');
+    } else {
+        // Fallback to CSV if XLSX not available
+        let csv = '';
+        
+        // Property Information
+        csv += 'PROPERTY INFORMATION\n';
+        csv += 'Property Name,Address,Type,Units,Description\n';
+        csv += `"${property.name}","${property.address}","${property.type}",${property.units},"${property.description || ''}"\n\n`;
+        
+        // Tenant Accounts
+        csv += 'TENANT ACCOUNTS\n';
+        csv += 'Property Name,Unit,Tenant Name,Phone,Email,Rent Amount,Tenant Since,Total Paid,Deposit Paid,Balance\n';
+        if (property.tenants) {
+            property.tenants.forEach(tenant => {
+                const monthlyPayments = property.monthly?.filter(p => p.tenantId == tenant.id) || [];
+                const totalPaid = monthlyPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
+                const balance = (tenant.rent * monthlyPayments.length) - totalPaid;
+                
+                // Format date properly
+                const formattedDate = tenant.tenantSince ? new Date(tenant.tenantSince).toLocaleDateString('en-GB') : '';
+                
+                csv += `"${property.name}","${tenant.unit}","${tenant.name}","${tenant.phone || ''}","${tenant.email || ''}","${Number(tenant.rent || 0).toFixed(2)}","${formattedDate}","${Number(totalPaid || 0).toFixed(2)}","${Number(tenant.depositPaid || 0).toFixed(2)}","${Number(balance || 0).toFixed(2)}"\n`;
+            });
+        }
+        csv += '\n';
+        
+        // Payment History
+        csv += 'PAYMENT HISTORY\n';
+        csv += 'Date,Property Name,Tenant Name,Unit,Amount,Payment Type,Notes\n';
+        if (property.monthly) {
+            property.monthly.forEach(payment => {
+                const tenant = property.tenants?.find(t => t.id == payment.tenantId);
+                csv += `"${payment.date}","${property.name}","${tenant ? tenant.name : 'Unknown'}","${tenant ? tenant.unit : 'N/A'}",${payment.amount},"Rent","${payment.notes || ''}"\n`;
+            });
+        }
+        csv += '\n';
+        
+        // Expenses
+        csv += 'EXPENSES\n';
+        csv += 'Date,Property Name,Category,Description,Amount,Reference\n';
+        if (property.expenses) {
+            property.expenses.forEach(expense => {
+                csv += `"${expense.date}","${property.name}","${expense.category}","${expense.description}",${expense.amount},"${expense.reference || ''}"\n`;
+            });
+        }
+        
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${property.name}-full-${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+        
+        closePropertyExportDialog();
+        showNotification('Full property CSV exported successfully!');
+    }
+}
+
+function exportPropertyScreenshot() {
+    const propertyId = document.getElementById('exportPropertySelect').value;
+    if (!propertyId) {
+        showNotification('Please select a property first', 'error');
+        return;
+    }
+    
+    const property = data.properties.find(p => p.id == propertyId);
+    if (!property) return;
+    
+    // Create a temporary summary element for screenshot
+    const summaryDiv = document.createElement('div');
+    summaryDiv.style.cssText = `
+        position: fixed;
+        top: -9999px;
+        left: -9999px;
+        width: 400px;
+        padding: 20px;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        font-family: Arial, sans-serif;
+        color: #333;
+        z-index: 9999;
+    `;
+    
+    // Build summary content
+    let summaryHTML = `
+        <h2 style="margin: 0 0 15px 0; color: #2563eb; font-size: 18px;">${property.name}</h2>
+        <p style="margin: 5px 0; font-size: 12px; color: #666;">${property.address}</p>
+        <div style="margin: 15px 0; padding: 10px; background: #f8fafc; border-radius: 4px;">
+            <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #1e293b;">Property Summary</h3>
+            <p style="margin: 3px 0; font-size: 11px;">Type: ${property.type} | Units: ${property.units}</p>
+    `;
+    
+    // Add tenant summary
+    if (property.tenants && property.tenants.length > 0) {
+        summaryHTML += `
+            <h3 style="margin: 15px 0 10px 0; font-size: 14px; color: #1e293b;">Tenants (${property.tenants.length})</h3>
+            <table style="width: 100%; font-size: 11px; border-collapse: collapse;">
+                <tr style="background: #e2e8f0;">
+                    <th style="padding: 5px; text-align: left; border: 1px solid #cbd5e1;">Unit</th>
+                    <th style="padding: 5px; text-align: left; border: 1px solid #cbd5e1;">Name</th>
+                    <th style="padding: 5px; text-align: right; border: 1px solid #cbd5e1;">Rent</th>
+                </tr>
+        `;
+        
+        property.tenants.forEach(tenant => {
+            summaryHTML += `
+                <tr>
+                    <td style="padding: 3px 5px; border: 1px solid #e2e8f0;">${tenant.unit}</td>
+                    <td style="padding: 3px 5px; border: 1px solid #e2e8f0;">${tenant.name}</td>
+                    <td style="padding: 3px 5px; text-align: right; border: 1px solid #e2e8f0;">Ksh ${tenant.rent.toLocaleString()}</td>
+                </tr>
+            `;
+        });
+        
+        summaryHTML += '</table>';
+    }
+    
+    // Add financial summary
+    const totalIncome = property.monthly?.reduce((sum, payment) => sum + (payment.amount || 0), 0) || 0;
+    const totalExpenses = property.expenses?.reduce((sum, expense) => sum + (expense.amount || 0), 0) || 0;
+    const netIncome = totalIncome - totalExpenses;
+    
+    summaryHTML += `
+        <h3 style="margin: 15px 0 10px 0; font-size: 14px; color: #1e293b;">Financial Summary</h3>
+        <div style="font-size: 11px;">
+            <p style="margin: 3px 0;">Total Income: <strong>Ksh ${totalIncome.toLocaleString()}</strong></p>
+            <p style="margin: 3px 0;">Total Expenses: <strong>Ksh ${totalExpenses.toLocaleString()}</strong></p>
+            <p style="margin: 3px 0;">Net Income: <strong style="color: ${netIncome >= 0 ? '#16a34a' : '#dc2626'};">Ksh ${netIncome.toLocaleString()}</strong></p>
+        </div>
+        <p style="margin: 15px 0 0 0; font-size: 10px; color: #94a3b8; text-align: center;">
+            Generated on ${new Date().toLocaleDateString()} via Inzu App
+        </p>
+    `;
+    
+    summaryDiv.innerHTML = summaryHTML;
+    document.body.appendChild(summaryDiv);
+    
+    // Use html2canvas to capture the summary
+    if (typeof html2canvas !== 'undefined') {
+        html2canvas(summaryDiv, {
+            backgroundColor: '#ffffff',
+            scale: 2,
+            logging: false
+        }).then(canvas => {
+            // Convert canvas to blob and download
+            canvas.toBlob(function(blob) {
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `${property.name}-summary-${new Date().toISOString().split('T')[0]}.png`;
+                link.click();
+                URL.revokeObjectURL(url);
+                
+                // Clean up
+                document.body.removeChild(summaryDiv);
+                closePropertyExportDialog();
+                showNotification('PNG image (.png) exported successfully - ready for WhatsApp sharing!');
+            }, 'image/png');
+        }).catch(error => {
+            console.error('Screenshot error:', error);
+            document.body.removeChild(summaryDiv);
+            showNotification('Failed to generate screenshot', 'error');
+        });
+    } else {
+        document.body.removeChild(summaryDiv);
+        showNotification('Screenshot library not available', 'error');
+    }
 }
 
 function savePropertyInfo() {
@@ -1034,174 +1941,6 @@ function savePropertyInfo() {
     showToast('Property added successfully', 'success');
 }
 
-function selectProperty(propertyId) {
-    console.log('🔍 selectProperty called with propertyId:', propertyId, 'type:', typeof propertyId);
-    
-    // Convert to number to ensure consistent type comparison
-    const numericPropertyId = parseInt(propertyId, 10);
-    console.log('🔍 numericPropertyId:', numericPropertyId);
-    
-    const property = data.properties.find(p => {
-        console.log('🔍 comparing p.id:', p.id, 'type:', typeof p.id, 'with numericPropertyId:', numericPropertyId);
-        return p.id === numericPropertyId;
-    });
-    
-    console.log('🔍 found property:', property);
-    
-    data.selectedPropertyId = numericPropertyId;
-    console.log('🔍 data.selectedPropertyId set to:', data.selectedPropertyId);
-    
-    saveData();
-    
-    // === TOGGLE VISIBILITY ===
-    // Hide: Property cards COMPLETELY
-    const propertyCards = document.querySelectorAll('.property-card');
-    propertyCards.forEach(card => {
-        card.style.display = 'none';
-        console.log('🔍 Property card hidden');
-    });
-    
-    // Hide: Property title bar COMPLETELY
-    const propertyHeaderCard = document.getElementById('propertyHeaderCard');
-    if (propertyHeaderCard) {
-        propertyHeaderCard.style.display = 'none';
-        console.log('🔍 Property header card hidden');
-    }
-    
-    // Hide: Add property form if open
-    const addPropertyForm = document.getElementById('addPropertyForm');
-    if (addPropertyForm) addPropertyForm.style.display = 'none';
-    
-    // Hide: Properties list container
-    const propertiesList = document.getElementById('propertiesList');
-    if (propertiesList) propertiesList.style.display = 'none';
-    
-    // Show: Property navigation tabs
-    const propNav = document.getElementById('propertyNavigation');
-    if (propNav) {
-        propNav.style.display = 'flex';
-        console.log('🔍 Property navigation shown');
-    }
-    
-    // Show: Tenants tab content
-    const tenantsTab = document.getElementById('tenants');
-    if (tenantsTab) {
-        tenantsTab.classList.add('active');
-        tenantsTab.style.display = 'block';
-    }
-    
-    // Show: Property header in tenants tab with property name
-    const tenantsPropertyHeader = document.getElementById('tenantsPropertyHeader');
-    if (tenantsPropertyHeader) {
-        tenantsPropertyHeader.style.display = 'block';
-        document.getElementById('tenantsPropertyName').textContent = property.name;
-        document.getElementById('tenantsPropertyAddress').textContent = property.address;
-    }
-    
-    // Show: Property header in monthly tab with property name
-    const monthlyPropertyHeader = document.getElementById('monthlyPropertyHeader');
-    if (monthlyPropertyHeader) {
-        monthlyPropertyHeader.style.display = 'block';
-        document.getElementById('monthlyPropertyName').textContent = property.name;
-        document.getElementById('monthlyPropertyAddress').textContent = property.address;
-    }
-    
-    // Show: Property header in expenses tab with property name
-    const expensesPropertyHeader = document.getElementById('expensesPropertyHeader');
-    if (expensesPropertyHeader) {
-        expensesPropertyHeader.style.display = 'block';
-        document.getElementById('expensesPropertyName').textContent = property.name;
-        document.getElementById('expensesPropertyAddress').textContent = property.address;
-    }
-    
-    // Show: Property header in summary tab with property name
-    const summaryPropertyHeader = document.getElementById('summaryPropertyHeader');
-    if (summaryPropertyHeader) {
-        summaryPropertyHeader.style.display = 'block';
-        document.getElementById('summaryPropertyName').textContent = property.name;
-        document.getElementById('summaryPropertyAddress').textContent = property.address;
-    }
-    
-    // Update property header colors with unique gradients
-    updatePropertyHeaderColors(property);
-    
-    // Show: Back button
-    const tenantsBackButton = document.getElementById('tenantsBackButton');
-    if (tenantsBackButton) tenantsBackButton.style.display = 'block';
-    
-    const monthlyBackButton = document.getElementById('monthlyBackButton');
-    if (monthlyBackButton) monthlyBackButton.style.display = 'block';
-    
-    const expensesBackButton = document.getElementById('expensesBackButton');
-    if (expensesBackButton) expensesBackButton.style.display = 'block';
-    
-    const summaryBackButton = document.getElementById('summaryBackButton');
-    if (summaryBackButton) summaryBackButton.style.display = 'block';
-    
-    // Update: Add New Tenant button
-    const tenantToggleBtn = document.getElementById('tenantToggleBtn');
-    if (tenantToggleBtn) {
-        tenantToggleBtn.textContent = `➕ Add New Tenant`;
-        tenantToggleBtn.style.display = 'inline-flex';
-    }
-    
-    // Update: Monthly toggle button
-    const monthlyToggleBtn = document.getElementById('monthlyToggleBtn');
-    if (monthlyToggleBtn) {
-        monthlyToggleBtn.textContent = '➕ Record Payment';
-        monthlyToggleBtn.style.display = 'inline-flex';
-    }
-    
-    // Update: Expense toggle button
-    const expenseToggleBtn = document.getElementById('expenseToggleBtn');
-    if (expenseToggleBtn) {
-        expenseToggleBtn.textContent = '➕ Add Expense';
-        expenseToggleBtn.style.display = 'inline-flex';
-    }
-    
-    // Keep: Add tenant form COLLAPSED by default
-    const tenantFormCollapsible = document.getElementById('tenantFormCollapsible');
-    if (tenantFormCollapsible) {
-        tenantFormCollapsible.style.maxHeight = '0';
-        tenantFormCollapsible.style.opacity = '0';
-        tenantFormCollapsible.classList.add('collapsed');
-    }
-    
-    // Keep: Monthly form COLLAPSED by default
-    const monthlyFormCollapsible = document.getElementById('monthlyFormCollapsible');
-    if (monthlyFormCollapsible) {
-        monthlyFormCollapsible.style.maxHeight = '0';
-        monthlyFormCollapsible.style.opacity = '0';
-        monthlyFormCollapsible.classList.add('collapsed');
-    }
-    
-    // Keep: Expense form COLLAPSED by default
-    const expenseFormCollapsible = document.getElementById('expenseFormCollapsible');
-    if (expenseFormCollapsible) {
-        expenseFormCollapsible.style.maxHeight = '0';
-        expenseFormCollapsible.style.opacity = '0';
-        expenseFormCollapsible.classList.add('collapsed');
-    }
-    
-    // Show: Tenants list
-    const tenantsList = document.getElementById('tenantsList');
-    if (tenantsList) tenantsList.style.display = 'block';
-    
-    // Hide: Properties tab content itself
-    const propertiesTab = document.getElementById('property');
-    if (propertiesTab) {
-        propertiesTab.classList.remove('active');
-        propertiesTab.style.display = 'none';
-    }
-    
-    // Update all other tabs to show only data for selected property
-    renderAllEntries();
-    updateTenantSelects();
-    updateSummary();
-    
-    // Populate unit dropdown for new tenant form
-    populateUnitDropdown();
-}
 
 function backToProperties() {
     data.selectedPropertyId = null;
@@ -1670,12 +2409,54 @@ function showTab(tabName, buttonElement) {
         renderProperties();
     } else if (tabName === 'tenants') {
         console.log('🔍 Activating TENANTS tab');
+        
+        // Show: Tenants list
+        const tenantsList = document.getElementById('tenantsList');
+        if (tenantsList) {
+            tenantsList.style.display = 'block';
+            console.log('🔍 Showing tenants list');
+        }
+        
+        // Show: Add tenant button
+        const tenantToggleBtn = document.getElementById('tenantToggleBtn');
+        if (tenantToggleBtn) {
+            tenantToggleBtn.style.display = 'inline-flex';
+        }
+        
         renderTenants();
     } else if (tabName === 'monthly') {
         console.log('🔍 Activating MONTHLY tab');
+        
+        // Show: Monthly list
+        const monthlyList = document.getElementById('monthlyList');
+        if (monthlyList) {
+            monthlyList.style.display = 'block';
+            console.log('🔍 Showing monthly list');
+        }
+        
+        // Show: Add payment button
+        const monthlyToggleBtn = document.getElementById('monthlyToggleBtn');
+        if (monthlyToggleBtn) {
+            monthlyToggleBtn.style.display = 'inline-flex';
+        }
+        
         renderMonthly();
     } else if (tabName === 'expenses') {
         console.log('🔍 Activating EXPENSES tab');
+        
+        // Show: Expenses list
+        const expensesList = document.getElementById('expensesList');
+        if (expensesList) {
+            expensesList.style.display = 'block';
+            console.log('🔍 Showing expenses list');
+        }
+        
+        // Show: Add expense button
+        const expenseToggleBtn = document.getElementById('expenseToggleBtn');
+        if (expenseToggleBtn) {
+            expenseToggleBtn.style.display = 'inline-flex';
+        }
+        
         renderExpenses();
     } else if (tabName === 'summary') {
         console.log('🔍 Activating SUMMARY tab');
@@ -2090,8 +2871,16 @@ function initializeForms() {
         addExpense();
     });
 
+    // Expense edit form
+    document.getElementById('expenseEditForm').addEventListener('submit', function(e) {
+        console.log('🔧 Expense edit form submitted!');
+        e.preventDefault();
+        addExpense();
+    });
+
     // Add change detection listeners to expense form fields
     const expenseFormFields = ['expenseCategory', 'expenseDescription', 'expenseReference', 'expenseAmount', 'expenseDate'];
+    const expenseEditFormFields = ['expenseCategoryEdit', 'expenseDescriptionEdit', 'expenseReferenceEdit', 'expenseAmountEdit', 'expenseDateEdit'];
     
     expenseFormFields.forEach(fieldId => {
         const field = document.getElementById(fieldId);
@@ -2103,6 +2892,23 @@ function initializeForms() {
             });
             field.addEventListener('change', () => {
                 const currentState = JSON.stringify(Array.from(new FormData(document.getElementById('expenseForm'))));
+                hasExpenseFormChanged = currentState !== expenseFormInitialState;
+                updateExpenseFormButtons();
+            });
+        }
+    });
+    
+    // Add change detection listeners to expense edit form fields
+    expenseEditFormFields.forEach(fieldId => {
+        const field = document.getElementById(fieldId);
+        if (field) {
+            field.addEventListener('input', () => {
+                const currentState = JSON.stringify(Array.from(new FormData(document.getElementById('expenseEditForm'))));
+                hasExpenseFormChanged = currentState !== expenseFormInitialState;
+                updateExpenseFormButtons();
+            });
+            field.addEventListener('change', () => {
+                const currentState = JSON.stringify(Array.from(new FormData(document.getElementById('expenseEditForm'))));
                 hasExpenseFormChanged = currentState !== expenseFormInitialState;
                 updateExpenseFormButtons();
             });
@@ -2658,7 +3464,7 @@ function addNewTenant() {
         rent: Number(tenantRent),
         phone: tenantPhone,
         email: tenantEmail,
-        since: tenantSince,
+        tenantSince: tenantSince, // Fixed: use consistent field name
         depositPaid: Number(depositPaid) || 0,
         electricityMeter: electricityMeter,
         electricityBalance: Number(electricityBalance) || 0,
@@ -2667,6 +3473,13 @@ function addNewTenant() {
         notes: tenantNotes,
         leaseDocuments: [],
         idDocuments: [],
+        // Archive fields
+        tenantEnd: null,
+        finalBillAmount: null,
+        depositReturned: null,
+        finalElectricityReading: null,
+        finalWaterReading: null,
+        isArchived: false,
         createdAt: new Date().toISOString()
     };
 
@@ -3088,16 +3901,32 @@ function addMonthly() {
 }
 
 // ===== EXPENSE FUNCTIONS =====
+// Prevent duplicate submissions
+let isSubmittingExpense = false;
+
 function addExpense() {
+    console.log('🔧 addExpense() called!');
+    console.log('🔧 editingExpenseId:', window.editingExpenseId);
+    
+    // Prevent duplicate submissions
+    if (isSubmittingExpense) {
+        console.log('🔧 Preventing duplicate submission');
+        return;
+    }
+    
+    isSubmittingExpense = true;
+    
     // Validate that a property is selected
     if (!data.selectedPropertyId) {
         showNotification('Please select a property first!');
+        isSubmittingExpense = false;
         return;
     }
     
     const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
     if (!selectedProperty) {
         showNotification('Selected property not found!');
+        isSubmittingExpense = false;
         return;
     }
     
@@ -3121,25 +3950,35 @@ function addExpense() {
     // 🔑 CRITICAL: Check editing state BEFORE clearing it
     const wasEditing = window.editingExpenseId !== null;
 
+    console.log('🔧 Before operation - expenses count:', selectedProperty.expenses.length);
+    console.log('🔧 Current expenses:', selectedProperty.expenses);
+    
     if (window.editingExpenseId) {
         // Update existing expense
         const index = selectedProperty.expenses.findIndex(e => e.id === window.editingExpenseId);
+        console.log('🔧 Found expense at index:', index);
         if (index !== -1) {
             selectedProperty.expenses[index] = expense;
+            console.log('🔧 Updated expense at index:', index);
             showNotification('Expense updated successfully!');
         }
         window.editingExpenseId = null;
     } else {
         // Add new expense to selected property
         selectedProperty.expenses.push(expense);
+        console.log('🔧 Added new expense. Total count:', selectedProperty.expenses.length);
+        console.log('🔧 All expenses after add:', selectedProperty.expenses);
         showNotification('Expense added successfully!');
     }
     
     saveData();
     renderExpenses();
     
+    // Reset submission flag
+    isSubmittingExpense = false;
+    
     if (wasEditing) {
-        // This was an update, close overlay instead
+        // This was an update, close overlay and navigate to expense tab
         document.getElementById('expenseEditOverlay').classList.add('hidden');
         document.body.style.overflow = '';
         
@@ -3155,6 +3994,9 @@ function addExpense() {
         
         // Hide cancel button
         document.getElementById('expenseCancelBtn').classList.add('hidden');
+        
+        // Navigate to expense tab
+        showTab('expenses');
         
         showNotification('Expense updated successfully!');
     } else {
@@ -3414,7 +4256,6 @@ function renderTenants() {
             <div class="entry-actions">
                 <button class="btn btn-small btn-secondary" onclick="editTenant(${tenant.id})">Edit</button>
                 <button class="btn btn-small btn-warning" onclick="archiveTenant(${tenant.id})">Archive</button>
-                <button class="btn btn-small btn-danger" onclick="deleteTenant(${tenant.id})">Delete</button>
             </div>
         </div>
     `).join('');
@@ -3452,7 +4293,15 @@ function renderMonthly() {
     const selectedProperty = data.properties.find(p => p.id === data.selectedPropertyId);
     const propertyTenants = selectedProperty ? (selectedProperty.tenants || []) : [];
 
-    container.innerHTML = monthlyPayments.map(payment => {
+    // Sort monthly payments by date, latest first
+    const sortedPayments = [...monthlyPayments].sort((a, b) => {
+        const dateA = new Date(a.date);
+        const dateB = new Date(b.date);
+        console.log('Sorting dates:', a.date, '->', dateA, 'vs', b.date, '->', dateB);
+        return dateB - dateA;
+    });
+    
+    container.innerHTML = sortedPayments.map(payment => {
         const tenant = propertyTenants.find(t => t.id == payment.tenantId);
         return `
             <div class="entry-card">
@@ -3508,7 +4357,29 @@ function renderExpenses() {
     }
     
     console.log('🔍 Rendering expenses list');
-    container.innerHTML = selectedProperty.expenses.map(expense => `
+    console.log('🔧 Expenses to render:', selectedProperty.expenses);
+    
+    // Filter out any invalid expenses (empty or missing required fields)
+    const validExpenses = selectedProperty.expenses.filter(expense => {
+        const isValid = expense && expense.description && expense.amount && expense.date;
+        if (!isValid) {
+            console.log('🔧 Filtering out invalid expense:', expense);
+        }
+        return isValid;
+    });
+    
+    console.log('🔧 Valid expenses after filtering:', validExpenses);
+    
+    // Sort expenses by date, latest first
+    const sortedExpenses = [...validExpenses].sort((a, b) => {
+        const dateA = new Date(a.date);
+        const dateB = new Date(b.date);
+        return dateB - dateA;
+    });
+    
+    console.log('🔧 Sorted expenses:', sortedExpenses);
+    
+    container.innerHTML = sortedExpenses.map(expense => `
         <div class="entry-card">
             <div class="entry-header">
                 <div class="entry-title">${expense.description}</div>
@@ -3621,34 +4492,8 @@ function updateTenantSelects() {
 
 // ===== ARCHIVE FUNCTIONS =====
 function archiveTenant(id) {
-    const confirmMessage = `ARCHIVE TENANT - This will:
-
-• Remove tenant from the active tenant list
-• Data will only be accessible through CSV export
-
-This action CANNOT be reversed.
-
-Do you want to archive this tenant?`;
-    
-    if (confirm(confirmMessage)) {
-        // Archive tenant from hierarchical structure
-        for (const property of data.properties) {
-            if (property.tenants) {
-                const index = property.tenants.findIndex(t => t.id === id);
-                if (index !== -1) {
-                    const tenant = property.tenants[index];
-                    // Mark as archived instead of deleting
-                    tenant.archived = true;
-                    tenant.archivedDate = new Date().toISOString();
-                    break;
-                }
-            }
-        }
-        saveData();
-        renderTenants();
-        showToast('Tenant archived - data saved in database', 'success');
-        updateTenantSelects();
-    }
+    // Show the new archive modal instead of simple confirm
+    showArchiveModal(id);
 }
 
 // ===== DELETE FUNCTIONS =====
@@ -4066,47 +4911,481 @@ function exportData() {
 }
 
 function exportCSV() {
-    let csv = 'Type,Name/Description,Amount,Date,Notes\n';
+    let csv = '';
     
-    // Export tenants from all properties
+    // ===== ACCOUNTS BY PROPERTY =====
+    csv += 'ACCOUNTS BY PROPERTY\n';
+    csv += 'Property Name,Address,Type,Units,Total Tenants,Monthly Income,Total Expenses,Net Income\n';
+    
+    data.properties.forEach(property => {
+        const tenants = property.tenants || [];
+        const monthlyPayments = property.monthly || [];
+        const expenses = property.expenses || [];
+        
+        const totalTenants = tenants.length;
+        const monthlyIncome = monthlyPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
+        const totalExpenses = expenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
+        const netIncome = monthlyIncome - totalExpenses;
+        
+        csv += `"${property.name}","${property.address}","${property.type}",${property.units},${totalTenants},${monthlyIncome},${totalExpenses},${netIncome}\n`;
+    });
+    
+    csv += '\n';
+    
+    // ===== ACCOUNTS BY TENANT =====
+    csv += 'ACCOUNTS BY TENANT\n';
+    csv += 'Property Name,Unit,Tenant Name,Phone,Email,Rent Amount,Tenant Since,Total Paid,Deposit Paid,Balance\n';
+    
     data.properties.forEach(property => {
         if (property.tenants) {
             property.tenants.forEach(tenant => {
-                csv += `Tenant,"${tenant.name}",${tenant.rent},${tenant.createdAt},"Unit: ${tenant.unit}"\n`;
+                const monthlyPayments = property.monthly?.filter(p => p.tenantId == tenant.id) || [];
+                const totalPaid = monthlyPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
+                const balance = (tenant.rent * monthlyPayments.length) - totalPaid;
+                
+                // Format date properly
+                const formattedDate = tenant.tenantSince ? new Date(tenant.tenantSince).toLocaleDateString('en-GB') : '';
+                
+                csv += `"${property.name}","${tenant.unit}","${tenant.name}","${tenant.phone || ''}","${tenant.email || ''}","${Number(tenant.rent || 0).toFixed(2)}","${formattedDate}","${Number(totalPaid || 0).toFixed(2)}","${Number(tenant.depositPaid || 0).toFixed(2)}","${Number(balance || 0).toFixed(2)}"\n`;
             });
         }
     });
     
-    // Export monthly payments
+    csv += '\n';
+    
+    // ===== DETAILED PAYMENT HISTORY =====
+    csv += 'DETAILED PAYMENT HISTORY\n';
+    csv += 'Date,Property Name,Tenant Name,Unit,Amount,Payment Type,Notes\n';
+    
     data.properties.forEach(property => {
         if (property.monthly) {
             property.monthly.forEach(payment => {
-                // Find tenant in this property
                 const tenant = property.tenants?.find(t => t.id == payment.tenantId);
-                csv += `Payment,"${tenant ? tenant.name : 'Unknown'}",${payment.amount},${payment.date},"${payment.notes || ''}"\n`;
+                csv += `"${payment.date}","${property.name}","${tenant ? tenant.name : 'Unknown'}","${tenant ? tenant.unit : 'N/A'}",${payment.amount},"Rent","${payment.notes || ''}"\n`;
             });
         }
     });
     
-    // Export move outs
+    csv += '\n';
+    
+    // ===== EXPENSE TRACKING =====
+    csv += 'EXPENSE TRACKING\n';
+    csv += 'Date,Property Name,Category,Description,Amount,Reference\n';
+    
     data.properties.forEach(property => {
-        if (property.moveOuts) {
-            property.moveOuts.forEach(moveOut => {
-                // Find tenant in this property
-                const tenant = property.tenants?.find(t => t.id == moveOut.tenantId);
-                csv += `Move Out,"${tenant ? tenant.name : 'Unknown'}",${moveOut.depositReturned || 0},${moveOut.date},"${moveOut.notes || ''}"\n`;
+        if (property.expenses) {
+            property.expenses.forEach(expense => {
+                csv += `"${expense.date}","${property.name}","${expense.category}","${expense.description}",${expense.amount},"${expense.reference || ''}"\n`;
             });
         }
     });
     
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `inzu-${new Date().toISOString().split('T')[0]}.csv`;
+    link.download = `inzu-accounts-${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
     URL.revokeObjectURL(url);
     showNotification('CSV exported successfully!');
+}
+
+// ===== EXPORT DIALOG FUNCTIONS =====
+function showExportDialog() {
+    const dialog = document.getElementById('exportDialog');
+    const propertyFilter = document.getElementById('exportPropertyFilter');
+    const tenantFilter = document.getElementById('exportTenantFilter');
+    
+    // Clear previous options
+    propertyFilter.innerHTML = '<option value="all">All Properties</option>';
+    tenantFilter.innerHTML = '<option value="all">All Tenants</option>';
+    
+    // Populate property filter
+    data.properties.forEach(property => {
+        const option = document.createElement('option');
+        option.value = property.id;
+        option.textContent = property.name;
+        propertyFilter.appendChild(option);
+    });
+    
+    // Populate tenant filter
+    data.properties.forEach(property => {
+        if (property.tenants) {
+            property.tenants.forEach(tenant => {
+                const option = document.createElement('option');
+                option.value = tenant.id;
+                option.textContent = `${tenant.name} (${property.name})`;
+                tenantFilter.appendChild(option);
+            });
+        }
+    });
+    
+    dialog.style.display = 'flex';
+}
+
+function closeExportDialog() {
+    const dialog = document.getElementById('exportDialog');
+    dialog.style.display = 'none';
+}
+
+function generateExport() {
+    const exportType = document.querySelector('input[name="exportType"]:checked').value;
+    const includeProperties = document.getElementById('exportProperties').checked;
+    const includeTenants = document.getElementById('exportTenants').checked;
+    const includeMonthly = document.getElementById('exportMonthly').checked;
+    const includeExpenses = document.getElementById('exportExpenses').checked;
+    const propertyFilter = document.getElementById('exportPropertyFilter').value;
+    const tenantFilter = document.getElementById('exportTenantFilter').value;
+    
+    // Filter data based on selections
+    let filteredProperties = data.properties;
+    if (propertyFilter !== 'all') {
+        filteredProperties = data.properties.filter(p => p.id == propertyFilter);
+    }
+    
+    if (exportType === 'csv') {
+        generateFilteredCSV(filteredProperties, includeProperties, includeTenants, includeMonthly, includeExpenses, tenantFilter);
+    } else {
+        generateFilteredExcel(filteredProperties, includeProperties, includeTenants, includeMonthly, includeExpenses, tenantFilter);
+    }
+    
+    closeExportDialog();
+}
+
+function generateFilteredCSV(properties, includeProperties, includeTenants, includeMonthly, includeExpenses, tenantFilter) {
+    let csv = '';
+    
+    // ===== ACCOUNTS BY PROPERTY =====
+    if (includeProperties) {
+        csv += 'ACCOUNTS BY PROPERTY\n';
+        csv += 'Property Name,Address,Type,Units,Total Tenants,Monthly Income,Total Expenses,Net Income\n';
+        
+        properties.forEach(property => {
+            const tenants = property.tenants || [];
+            const monthlyPayments = property.monthly || [];
+            const expenses = property.expenses || [];
+            
+            // Apply tenant filter if specified
+            let filteredTenants = tenants;
+            let filteredMonthly = monthlyPayments;
+            let filteredExpenses = expenses;
+            
+            if (tenantFilter !== 'all') {
+                filteredTenants = tenants.filter(t => t.id == tenantFilter);
+                filteredMonthly = monthlyPayments.filter(p => p.tenantId == tenantFilter);
+            }
+            
+            const totalTenants = filteredTenants.length;
+            const monthlyIncome = filteredMonthly.reduce((sum, payment) => sum + (payment.amount || 0), 0);
+            const totalExpenses = filteredExpenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
+            const netIncome = monthlyIncome - totalExpenses;
+            
+            csv += `"${property.name}","${property.address}","${property.type}",${property.units},${totalTenants},${monthlyIncome},${totalExpenses},${netIncome}\n`;
+        });
+        
+        csv += '\n';
+    }
+    
+    // ===== ACCOUNTS BY TENANT =====
+    if (includeTenants) {
+        csv += 'ACCOUNTS BY TENANT\n';
+        csv += 'Property Name,Unit,Tenant Name,Phone,Email,Rent Amount,Tenant Since,Total Paid,Deposit Paid,Balance\n';
+        
+        properties.forEach(property => {
+            if (property.tenants) {
+                property.tenants.forEach(tenant => {
+                    if (tenantFilter !== 'all' && tenant.id != tenantFilter) return;
+                    
+                    const monthlyPayments = property.monthly?.filter(p => p.tenantId == tenant.id) || [];
+                    const totalPaid = monthlyPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
+                    const balance = (tenant.rent * monthlyPayments.length) - totalPaid;
+                    
+                    // Format date properly
+                    const formattedDate = tenant.tenantSince ? new Date(tenant.tenantSince).toLocaleDateString('en-GB') : '';
+                    
+                    csv += `"${property.name}","${tenant.unit}","${tenant.name}","${tenant.phone || ''}","${tenant.email || ''}","${Number(tenant.rent || 0).toFixed(2)}","${formattedDate}","${Number(totalPaid || 0).toFixed(2)}","${Number(tenant.depositPaid || 0).toFixed(2)}","${Number(balance || 0).toFixed(2)}"\n`;
+                });
+            }
+        });
+        
+        csv += '\n';
+    }
+    
+    // ===== DETAILED PAYMENT HISTORY =====
+    if (includeMonthly) {
+        csv += 'DETAILED PAYMENT HISTORY\n';
+        csv += 'Date,Property Name,Tenant Name,Unit,Amount,Payment Type,Notes\n';
+        
+        properties.forEach(property => {
+            if (property.monthly) {
+                property.monthly.forEach(payment => {
+                    if (tenantFilter !== 'all' && payment.tenantId != tenantFilter) return;
+                    
+                    const tenant = property.tenants?.find(t => t.id == payment.tenantId);
+                    csv += `"${payment.date}","${property.name}","${tenant ? tenant.name : 'Unknown'}","${tenant ? tenant.unit : 'N/A'}",${payment.amount},"Rent","${payment.notes || ''}"\n`;
+                });
+            }
+        });
+        
+        csv += '\n';
+    }
+    
+    // ===== EXPENSE TRACKING =====
+    if (includeExpenses) {
+        csv += 'EXPENSE TRACKING\n';
+        csv += 'Date,Property Name,Category,Description,Amount,Reference\n';
+        
+        properties.forEach(property => {
+            if (property.expenses) {
+                property.expenses.forEach(expense => {
+                    csv += `"${expense.date}","${property.name}","${expense.category}","${expense.description}",${expense.amount},"${expense.reference || ''}"\n`;
+                });
+            }
+        });
+    }
+    
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `inzu-report-${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showNotification('CSV exported successfully!');
+}
+
+function generateFilteredExcel(properties, includeProperties, includeTenants, includeMonthly, includeExpenses, tenantFilter) {
+    const workbook = {
+        SheetNames: [],
+        Sheets: {}
+    };
+    
+    // ===== PROPERTY OVERVIEW SHEET =====
+    if (includeProperties) {
+        const propertyData = [
+            ['Property Name', 'Address', 'Type', 'Units', 'Total Tenants', 'Monthly Income', 'Total Expenses', 'Net Income']
+        ];
+        
+        properties.forEach(property => {
+            const tenants = property.tenants || [];
+            const monthlyPayments = property.monthly || [];
+            const expenses = property.expenses || [];
+            
+            // Apply tenant filter if specified
+            let filteredTenants = tenants;
+            let filteredMonthly = monthlyPayments;
+            let filteredExpenses = expenses;
+            
+            if (tenantFilter !== 'all') {
+                filteredTenants = tenants.filter(t => t.id == tenantFilter);
+                filteredMonthly = monthlyPayments.filter(p => p.tenantId == tenantFilter);
+            }
+            
+            const totalTenants = filteredTenants.length;
+            const monthlyIncome = filteredMonthly.reduce((sum, payment) => sum + (payment.amount || 0), 0);
+            const totalExpenses = filteredExpenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
+            const netIncome = monthlyIncome - totalExpenses;
+            
+            propertyData.push([
+                property.name,
+                property.address,
+                property.type,
+                property.units,
+                totalTenants,
+                monthlyIncome,
+                totalExpenses,
+                netIncome
+            ]);
+        });
+        
+        const propertyWS = worksheetFromArrayOfArrays(propertyData);
+        workbook.SheetNames.push('Property Overview');
+        workbook.Sheets['Property Overview'] = propertyWS;
+    }
+    
+    // ===== DETAILED TENANT ACCOUNTS SHEET =====
+    if (includeTenants) {
+        const tenantData = [
+            ['Property Name', 'Unit', 'Tenant Name', 'Phone', 'Email', 'Rent Amount', 'Tenant Since', 'Total Paid', 'Deposit Paid', 'Balance', 'Status']
+        ];
+        
+        properties.forEach(property => {
+            if (property.tenants) {
+                property.tenants.forEach(tenant => {
+                    if (tenantFilter !== 'all' && tenant.id != tenantFilter) return;
+                    
+                    const monthlyPayments = property.monthly?.filter(p => p.tenantId == tenant.id) || [];
+                    const totalPaid = monthlyPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
+                    const balance = (tenant.rent * monthlyPayments.length) - totalPaid;
+                    const status = tenant.depositPaid ? 'Active' : 'Pending';
+                    
+                    // Format date properly
+                    const formattedDate = tenant.tenantSince ? new Date(tenant.tenantSince).toLocaleDateString('en-GB') : '';
+                    
+                    tenantData.push([
+                        property.name,
+                        tenant.unit,
+                        tenant.name,
+                        tenant.phone || '',
+                        tenant.email || '',
+                        Number(tenant.rent || 0).toFixed(2),
+                        formattedDate,
+                        Number(totalPaid || 0).toFixed(2),
+                        Number(tenant.depositPaid || 0).toFixed(2),
+                        Number(balance || 0).toFixed(2),
+                        status
+                    ]);
+                });
+            }
+        });
+        
+        const tenantWS = worksheetFromArrayOfArrays(tenantData);
+        workbook.SheetNames.push('Tenant Accounts');
+        workbook.Sheets['Tenant Accounts'] = tenantWS;
+    }
+    
+    // ===== RENT PAYMENT HISTORY SHEET =====
+    if (includeMonthly) {
+        const paymentData = [
+            ['Payment Date', 'Property Name', 'Tenant Name', 'Unit', 'Amount', 'Payment Method', 'Payment Type', 'Notes', 'Status']
+        ];
+        
+        properties.forEach(property => {
+            if (property.monthly) {
+                property.monthly.forEach(payment => {
+                    if (tenantFilter !== 'all' && payment.tenantId != tenantFilter) return;
+                    
+                    const tenant = property.tenants?.find(t => t.id == payment.tenantId);
+                    paymentData.push([
+                        payment.date,
+                        property.name,
+                        tenant ? tenant.name : 'Unknown',
+                        tenant ? tenant.unit : 'N/A',
+                        payment.amount,
+                        payment.method || 'Cash',
+                        'Rent',
+                        payment.notes || '',
+                        'Paid'
+                    ]);
+                });
+            }
+        });
+        
+        const paymentWS = worksheetFromArrayOfArrays(paymentData);
+        workbook.SheetNames.push('Rent Payments');
+        workbook.Sheets['Rent Payments'] = paymentWS;
+    }
+    
+    // ===== EXPENSE TRACKING SHEET =====
+    if (includeExpenses) {
+        const expenseData = [
+            ['Expense Date', 'Property Name', 'Category', 'Description', 'Amount', 'Reference', 'Status']
+        ];
+        
+        properties.forEach(property => {
+            if (property.expenses) {
+                property.expenses.forEach(expense => {
+                    expenseData.push([
+                        expense.date,
+                        property.name,
+                        expense.category,
+                        expense.description,
+                        expense.amount,
+                        expense.reference || '',
+                        'Paid'
+                    ]);
+                });
+            }
+        });
+        
+        const expenseWS = worksheetFromArrayOfArrays(expenseData);
+        workbook.SheetNames.push('Expenses');
+        workbook.Sheets['Expenses'] = expenseWS;
+    }
+    
+    // ===== FINANCIAL SUMMARY SHEET =====
+    if (includeProperties && (includeMonthly || includeExpenses)) {
+        const summaryData = [
+            ['Property Name', 'Total Income', 'Total Expenses', 'Net Income', 'Occupancy Rate', 'Average Rent']
+        ];
+        
+        properties.forEach(property => {
+            const tenants = property.tenants || [];
+            const monthlyPayments = property.monthly || [];
+            const expenses = property.expenses || [];
+            
+            const totalIncome = monthlyPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
+            const totalExpenses = expenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
+            const netIncome = totalIncome - totalExpenses;
+            const occupancyRate = property.units > 0 ? ((tenants.length / property.units) * 100).toFixed(1) + '%' : '0%';
+            const avgRent = tenants.length > 0 ? (tenants.reduce((sum, t) => sum + t.rent, 0) / tenants.length).toFixed(0) : 0;
+            
+            summaryData.push([
+                property.name,
+                totalIncome,
+                totalExpenses,
+                netIncome,
+                occupancyRate,
+                avgRent
+            ]);
+        });
+        
+        const summaryWS = worksheetFromArrayOfArrays(summaryData);
+        workbook.SheetNames.push('Financial Summary');
+        workbook.Sheets['Financial Summary'] = summaryWS;
+    }
+    
+    // Generate Excel file
+    if (typeof XLSX !== 'undefined') {
+        const wbout = XLSX.write(workbook, {bookType: 'xlsx', type: 'binary'});
+        const blob = new Blob([s2ab(wbout)], {type: 'application/octet-stream'});
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `inzu-comprehensive-report-${new Date().toISOString().split('T')[0]}.xlsx`;
+        link.click();
+        URL.revokeObjectURL(url);
+        showNotification('Excel file with multiple sheets exported successfully!');
+    } else {
+        showNotification('Excel library not loaded. Please try again.', 'error');
+    }
+}
+
+// Helper function to convert array of arrays to worksheet format
+function worksheetFromArrayOfArrays(data) {
+    if (typeof XLSX === 'undefined') {
+        throw new Error('XLSX library not loaded');
+    }
+    
+    const ws = {};
+    const range = {s: {c: 0, r: 0}, e: {c: 0, r: 0}};
+    
+    for (let R = 0; R !== data.length; ++R) {
+        for (let C = 0; C !== data[R].length; ++C) {
+            if (range.s.r > R) range.s.r = R;
+            if (range.s.c > C) range.s.c = C;
+            if (range.e.r < R) range.e.r = R;
+            if (range.e.c < C) range.e.c = C;
+            
+            const cell = {v: data[R][C]};
+            if (cell.v == null) continue;
+            
+            const cellRef = XLSX.utils.encode_cell({c: C, r: R});
+            ws[cellRef] = cell;
+        }
+    }
+    
+    if (range.s.c < 10000000) ws['!ref'] = XLSX.utils.encode_range(range);
+    ws['!cols'] = data[0].map(() => ({wch: 15}));
+    return ws;
+}
+
+// Helper function to convert string to ArrayBuffer
+function s2ab(s) {
+    const buf = new ArrayBuffer(s.length);
+    const view = new Uint8Array(buf);
+    for (let i = 0; i !== s.length; ++i) view[i] = s.charCodeAt(i) & 0xFF;
+    return buf;
 }
 
 function importData() {
@@ -4117,6 +5396,11 @@ function importData() {
         showNotification('Please select a file to import');
         return;
     }
+    
+    // Clear the file input so the same file can be selected again if needed
+    fileInput.value = '';
+    
+    showNotification('Importing data...', 'info');
     
     const reader = new FileReader();
     reader.onload = function(e) {
@@ -4278,15 +5562,20 @@ function updateMonthlyFormButtons() {
 }
 
 function captureExpenseFormState() {
-    const form = document.getElementById('expenseForm');
-    expenseFormInitialState = JSON.stringify(
-        Array.from(new FormData(form))
-    );
+    // Try to find the active form (add or edit)
+    const form = document.getElementById('expenseForm') || document.getElementById('expenseEditForm');
+    if (form) {
+        expenseFormInitialState = JSON.stringify(
+            Array.from(new FormData(form))
+        );
+    }
 }
 
 function updateExpenseFormButtons() {
     const cancelBtn = document.getElementById('expenseCancelBtn');
-    const saveBtn = document.querySelector('#expenseForm button[type="submit"]');
+    // Try to find both add and edit form buttons
+    const saveBtn = document.querySelector('#expenseForm button[type="submit"]') || 
+                   document.querySelector('#expenseEditForm button[type="submit"]');
     
     // Cancel button is always enabled
     if (cancelBtn) {
@@ -4374,7 +5663,7 @@ function editTenant(id) {
     document.getElementById('tenantRent').value = tenant.rent;
     document.getElementById('tenantPhone').value = tenant.phone || '';
     document.getElementById('tenantEmail').value = tenant.email || '';
-    document.getElementById('tenantSince').value = tenant.since || '';
+    document.getElementById('tenantSince').value = tenant.tenantSince || '';
     document.getElementById('depositPaid').value = tenant.depositPaid || '';
     document.getElementById('tenantNotes').value = tenant.notes || '';
     document.getElementById('electricityMeter').value = tenant.electricityMeter || '';
@@ -4882,8 +6171,8 @@ function editExpense(id) {
 // Function to cancel expense edit
 function cancelExpenseEdit() {
     if (window.editingExpenseId) {
-        // Check if there are unsaved changes
-        const hasChanges = !document.querySelector('#expenseForm button[type="submit"]').disabled;
+        // Check if there are unsaved changes - look for edit form button
+        const hasChanges = !document.querySelector('#expenseEditForm button[type="submit"]').disabled;
         
         if (hasChanges) {
             if (!confirm('You have unsaved changes. Are you sure you want to cancel?')) {
@@ -4915,6 +6204,9 @@ function cancelExpenseEdit() {
     // Hide overlay and restore background scroll
     document.getElementById('expenseEditOverlay').classList.add('hidden');
     document.body.style.overflow = '';
+    
+    // Navigate to expense tab instead of home
+    showTab('expenses');
     
     showNotification('Edit cancelled');
 }
@@ -5317,6 +6609,7 @@ function toggleUserMenu() {
     const overlay = document.querySelector('.slideout-overlay');
     slideout.classList.add('active');
     overlay.classList.add('active');
+    document.body.classList.add('sidebar-open');
     updateSlideoutUserInfo();
 }
 
@@ -5325,6 +6618,7 @@ function closeUserMenu() {
     const overlay = document.querySelector('.slideout-overlay');
     slideout.classList.remove('active');
     overlay.classList.remove('active');
+    document.body.classList.remove('sidebar-open');
 }
 
 function showBackupSection() {
@@ -5351,8 +6645,10 @@ function updateSlideoutUserInfo() {
 
 // ===== SPLASH SCREEN FUNCTIONS =====
 function hideSplash() {
+    console.log('🎯 hideSplash called, currentUser:', currentUser);
     const splashContainer = document.getElementById('splashContainer');
     if (splashContainer) {
+        console.log('🎯 Adding hidden class to splash container');
         splashContainer.classList.add('hidden');
         setTimeout(() => {
             splashContainer.style.display = 'none';
@@ -5360,8 +6656,15 @@ function hideSplash() {
         
         // Show auth container if user is not authenticated
         if (!currentUser) {
+            console.log('🎯 Showing auth container');
             document.getElementById('authContainer').style.display = 'flex';
+        } else {
+            console.log('🎯 User is authenticated, showing app content');
+            document.getElementById('authContainer').style.display = 'none';
+            document.getElementById('appContent').style.display = 'block';
         }
+    } else {
+        console.error('🎯 Splash container not found!');
     }
 }
 
@@ -5636,9 +6939,202 @@ window.removeSingleIdDocument = removeSingleIdDocument;
 window.removeNewFile = removeNewFile;
 window.removeNewLeaseFile = removeNewLeaseFile;
 window.installApp = window.installApp;
+window.captureSummaryScreenshot = captureSummaryScreenshot;
+window.showArchiveModal = showArchiveModal;
+window.closeArchiveModal = closeArchiveModal;
+window.confirmArchiveTenant = confirmArchiveTenant;
+
+// ===== ARCHIVE TENANT FUNCTIONS =====
+function showArchiveModal(tenantId) {
+    const property = data.properties.find(p => p.id == data.selectedPropertyId);
+    const tenant = property.tenants.find(t => t.id == tenantId);
+    
+    if (!tenant) {
+        showNotification('Tenant not found', 'error');
+        return;
+    }
+    
+    // Populate tenant summary
+    const summaryDiv = document.getElementById('archiveTenantSummary');
+    summaryDiv.innerHTML = `
+        <h4>${tenant.name}</h4>
+        <p><strong>Unit:</strong> ${tenant.unit}</p>
+        <p><strong>Monthly Rent:</strong> Ksh ${tenant.rent}</p>
+        <p><strong>Phone:</strong> ${tenant.phone || 'N/A'}</p>
+        <p><strong>Email:</strong> ${tenant.email || 'N/A'}</p>
+        <p><strong>Tenant Since:</strong> ${tenant.tenantSince || 'N/A'}</p>
+    `;
+    
+    // Set today's date as default
+    document.getElementById('archiveTenantEnd').value = new Date().toISOString().split('T')[0];
+    
+    // Show modal
+    const modal = document.getElementById('archiveTenantModal');
+    modal.style.display = 'flex';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+    document.body.style.overflow = 'hidden';
+    
+    // Store tenant ID for later use
+    window.currentArchiveTenantId = tenantId;
+}
+
+function closeArchiveModal() {
+    document.getElementById('archiveTenantModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+    window.currentArchiveTenantId = null;
+}
+
+function confirmArchiveTenant() {
+    const tenantEnd = document.getElementById('archiveTenantEnd').value;
+    const finalBillAmount = document.getElementById('archiveFinalBillAmount').value;
+    const depositReturned = document.getElementById('archiveDepositReturned').value;
+    const finalElectricityReading = document.getElementById('archiveFinalElectricityReading').value;
+    const finalWaterReading = document.getElementById('archiveFinalWaterReading').value;
+    
+    // Validation
+    if (!tenantEnd) {
+        showNotification('Please enter the date tenant left', 'error');
+        return;
+    }
+    
+    const property = data.properties.find(p => p.id == data.selectedPropertyId);
+    const tenant = property.tenants.find(t => t.id == window.currentArchiveTenantId);
+    
+    // Update tenant with archive data
+    tenant.tenantEnd = tenantEnd;
+    tenant.finalBillAmount = Number(finalBillAmount) || null;
+    tenant.depositReturned = Number(depositReturned) || null;
+    tenant.finalElectricityReading = Number(finalElectricityReading) || null;
+    tenant.finalWaterReading = Number(finalWaterReading) || null;
+    tenant.isArchived = true;
+    
+    // Save to Firebase
+    saveToFirebaseOnly(data);
+    
+    // Close modal
+    closeArchiveModal();
+    
+    // Refresh tenant list
+    renderTenants();
+    
+    showNotification('Tenant archived successfully!', 'success');
+}
+
+// Capture screenshot of summary page
+function captureSummaryScreenshot() {
+    // Use html2canvas to capture the summary section
+    const summaryElement = document.getElementById('summary');
+    
+    if (!summaryElement) {
+        showNotification('Summary section not found', 'error');
+        return;
+    }
+    
+    // Show loading notification
+    showNotification('Capturing screenshot...');
+    
+    // Temporarily hide any off-screen elements and ensure clean capture
+    const originalStyle = summaryElement.style.cssText;
+    
+    // Ensure the element is fully visible and properly positioned
+    summaryElement.style.position = 'relative';
+    summaryElement.style.left = '0';
+    summaryElement.style.top = '0';
+    summaryElement.style.width = 'auto';
+    summaryElement.style.height = 'auto';
+    summaryElement.style.overflow = 'visible';
+    summaryElement.style.transform = 'none';
+    
+    // Use html2canvas if available
+    if (typeof html2canvas !== 'undefined') {
+        html2canvas(summaryElement, {
+            backgroundColor: '#ffffff',
+            scale: 1,
+            logging: false,
+            useCORS: true,
+            allowTaint: true,
+            // Capture only the visible content
+            x: 0,
+            y: 0,
+            width: summaryElement.scrollWidth,
+            height: summaryElement.scrollHeight,
+            // Remove any scrollbars
+            scrollX: 0,
+            scrollY: 0
+        }).then(canvas => {
+            // Convert canvas to blob and download
+            canvas.toBlob(function(blob) {
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `summary-report-${new Date().toISOString().split('T')[0]}.png`;
+                link.click();
+                URL.revokeObjectURL(url);
+                
+                showNotification('Screenshot saved successfully!');
+            }, 'image/png', 1.0); // Use quality 1.0 for better image
+        }).catch(error => {
+            console.error('Screenshot error:', error);
+            showNotification('Failed to capture screenshot', 'error');
+        }).finally(() => {
+            // Restore original styling
+            summaryElement.style.cssText = originalStyle;
+        });
+    } else {
+        // Restore original styling before fallback
+        summaryElement.style.cssText = originalStyle;
+        
+        // Fallback: try to use browser's screenshot API if available
+        if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+            navigator.mediaDevices.getDisplayMedia({ 
+                preferCurrentTab: true,
+                video: { mediaSource: 'screen' }
+            }).then(stream => {
+                const video = document.createElement('video');
+                video.srcObject = stream;
+                video.play();
+                
+                setTimeout(() => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(video, 0, 0);
+                    
+                    canvas.toBlob(function(blob) {
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = `summary-report-${new Date().toISOString().split('T')[0]}.png`;
+                        link.click();
+                        URL.revokeObjectURL(url);
+                        
+                        stream.getTracks().forEach(track => track.stop());
+                        showNotification('Screenshot saved successfully!');
+                    }, 'image/png');
+                }, 1000);
+            }).catch(error => {
+                console.error('Screen capture error:', error);
+                showNotification('Screen capture not available', 'error');
+            });
+        } else {
+            showNotification('Screenshot functionality not available in this browser', 'error');
+        }
+    }
+}
 window.exportData = exportData;
 window.exportCSV = exportCSV;
-window.importData = importData;
+window.exportExcel = exportExcel;
+window.showExportDialog = showExportDialog;
+window.closeExportDialog = closeExportDialog;
+window.generateExport = generateExport;
+window.selectProperty = selectProperty;
+window.showPropertyExportDialog = showPropertyExportDialog;
+window.closePropertyExportDialog = closePropertyExportDialog;
+window.exportTenantOnly = exportTenantOnly;
+window.exportPropertyFull = exportPropertyFull;
+window.exportPropertyScreenshot = exportPropertyScreenshot;
 window.clearAllData = clearAllData;
 window.editTenant = editTenant;
 window.editMonthly = editMonthly;
@@ -5658,14 +7154,19 @@ window.cancelPropertyEdit = cancelPropertyEdit;
 window.checkPropertyFormChanges = checkPropertyFormChanges;
 window.updateProperty = updateProperty;
 window.backToProperties = backToProperties;
-window.selectProperty = selectProperty;
 window.toggleTenantForm = toggleTenantForm;
 window.toggleMonthlyForm = toggleMonthlyForm;
 window.hideSplash = hideSplash;
 window.showTab = showTab;
+window.updatePropertyHeaders = updatePropertyHeaders;
 window.toggleExpenseForm = toggleExpenseForm;
+window.handlePropertySelection = handlePropertySelection;
+window.switchExportTab = switchExportTab;
+window.exportTenantStatement = exportTenantStatement;
+window.exportTenantStatementImage = exportTenantStatementImage;
 window.showUpdatePrompt = showUpdatePrompt;
 window.dismissUpdate = dismissUpdate;
+window.toggleAutoUpdate = toggleAutoUpdate;
 window.applyUpdate = applyUpdate;
 window.addNewTenant = addNewTenant;
 window.showAddPropertyForm = showAddPropertyForm;

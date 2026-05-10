@@ -1,5 +1,5 @@
-const CACHE_NAME = 'inzu-v6'; // Restart from v1
-const APP_VERSION = '1.1.3'; // Restart from 1.0.0
+const CACHE_NAME = 'inzu-v39'; // Restart from v1
+const APP_VERSION = '1.1.36'; // Restart from 1.0.0
 const urlsToCache = [
   '/',
   '/index.html',

@@ -1,5 +1,9 @@
 {
+  "database": {
+    "rules": "database.rules.json"
+  },
   "hosting": {
+    "site": "inzu-home",
     "public": ".",
     "ignore": [
       "firebase.json",
