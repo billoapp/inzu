@@ -7,14 +7,28 @@
   "background_color": "#A64456",
   "theme_color": "#A64456",
   "orientation": "portrait-primary",
-  "share_target": {
-    "action": "/",
-    "method": "GET",
-    "params": {
-      "text": "shared_text",
-      "title": "shared_title"
+  "share_target": [
+    {
+      "action": "/",
+      "method": "GET",
+      "params": {
+        "text": "shared_text",
+        "title": "shared_title"
+      }
+    },
+    {
+      "action": "/",
+      "method": "GET", 
+      "params": {
+        "files": [
+          {
+            "name": "shared_image",
+            "accept": ["image/*"]
+          }
+        ]
+      }
     }
-  },
+  ],
   "icons": [
     {
       "src": "/icon-192.svg",

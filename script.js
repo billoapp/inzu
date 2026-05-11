@@ -7196,16 +7196,29 @@ window.hideAddPropertyForm = hideAddPropertyForm;
 // Shared Text Functionality
 let sharedTextData = null;
 
-// Parse URL parameters for shared text
+// Parse URL parameters for shared text and images
 function handleSharedText() {
     const urlParams = new URLSearchParams(window.location.search);
     const sharedText = urlParams.get('shared_text');
     const sharedTitle = urlParams.get('shared_title');
+    const sharedImage = urlParams.get('shared_image');
     
     if (sharedText) {
         sharedTextData = {
             text: sharedText,
-            title: sharedTitle || 'Shared Text'
+            title: sharedTitle || 'Shared Text',
+            type: 'text'
+        };
+        
+        // Show dialog after a short delay to ensure app is loaded
+        setTimeout(() => {
+            showSharedTextDialog();
+        }, 1000);
+    } else if (sharedImage) {
+        sharedTextData = {
+            text: sharedImage,
+            title: sharedTitle || 'Shared Image',
+            type: 'image'
         };
         
         // Show dialog after a short delay to ensure app is loaded
@@ -7220,9 +7233,33 @@ function showSharedTextDialog() {
     
     const dialog = document.getElementById('sharedTextDialog');
     const preview = document.getElementById('sharedTextPreview');
+    const title = document.getElementById('sharedDialogTitle');
     
-    if (dialog && preview) {
-        preview.textContent = sharedTextData.text;
+    if (dialog && preview && title) {
+        if (sharedTextData.type === 'image') {
+            // Set title for images
+            title.textContent = 'Add Shared Image';
+            
+            // For images, show a preview and note about OCR
+            preview.innerHTML = `
+                <div style="margin-bottom: 12px;">
+                    <strong>📷 Shared Image</strong>
+                </div>
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+                    <img src="${sharedTextData.text}" style="max-width: 100%; max-height: 200px; border-radius: 4px;" />
+                </div>
+                <div style="background: #fef3c7; border: 1px solid #fbbf24; border-radius: 8px; padding: 12px; font-size: 0.9rem;">
+                    <strong>⚠️ Image Processing</strong><br>
+                    Images require manual text entry. Please view the image and enter the payment details manually.
+                </div>
+            `;
+        } else {
+            // Set title for text
+            title.textContent = 'Add Shared Text';
+            
+            // For text, show the text content
+            preview.textContent = sharedTextData.text;
+        }
         dialog.style.display = 'flex';
     }
 }
@@ -7281,8 +7318,6 @@ function parseSharedText(text) {
 function addSharedTextToRent() {
     if (!sharedTextData) return;
     
-    const parsed = parseSharedText(sharedTextData.text);
-    
     // Switch to rent tab
     showTab('monthly');
     
@@ -7290,39 +7325,46 @@ function addSharedTextToRent() {
     setTimeout(() => {
         toggleRentForm();
         
-        // Fill the form with parsed data
-        setTimeout(() => {
-            if (parsed.amount) {
-                const amountField = document.getElementById('rentAmount');
-                if (amountField) {
-                    amountField.value = parsed.amount;
-                }
-            }
+        // Only pre-fill if it's text, not image
+        if (sharedTextData.type === 'text') {
+            const parsed = parseSharedText(sharedTextData.text);
             
-            if (parsed.date) {
-                const dateField = document.getElementById('rentDate');
-                if (dateField) {
-                    dateField.value = parsed.date;
+            // Fill form with parsed data
+            setTimeout(() => {
+                if (parsed.amount) {
+                    const amountField = document.getElementById('rentAmount');
+                    if (amountField) {
+                        amountField.value = parsed.amount;
+                    }
                 }
-            }
-            
-            if (parsed.notes) {
-                const notesField = document.getElementById('rentNotes');
-                if (notesField) {
-                    notesField.value = parsed.notes;
+                
+                if (parsed.date) {
+                    const dateField = document.getElementById('rentDate');
+                    if (dateField) {
+                        dateField.value = parsed.date;
+                    }
                 }
-            }
-        }, 300);
+                
+                if (parsed.notes) {
+                    const notesField = document.getElementById('rentNotes');
+                    if (notesField) {
+                        notesField.value = parsed.notes;
+                    }
+                }
+            }, 300);
+        }
     }, 300);
     
     closeSharedTextDialog();
-    showNotification('Shared text added to Rent form');
+    if (sharedTextData.type === 'text') {
+        showNotification('Shared text added to Rent form');
+    } else {
+        showNotification('Image shared - please enter payment details manually');
+    }
 }
 
 function addSharedTextToExpenses() {
     if (!sharedTextData) return;
-    
-    const parsed = parseSharedText(sharedTextData.text);
     
     // Switch to expenses tab
     showTab('expenses');
@@ -7331,33 +7373,42 @@ function addSharedTextToExpenses() {
     setTimeout(() => {
         toggleExpenseForm();
         
-        // Fill the form with parsed data
-        setTimeout(() => {
-            if (parsed.amount) {
-                const amountField = document.getElementById('expenseAmount');
-                if (amountField) {
-                    amountField.value = parsed.amount;
-                }
-            }
+        // Only pre-fill if it's text, not image
+        if (sharedTextData.type === 'text') {
+            const parsed = parseSharedText(sharedTextData.text);
             
-            if (parsed.date) {
-                const dateField = document.getElementById('expenseDate');
-                if (dateField) {
-                    dateField.value = parsed.date;
+            // Fill form with parsed data
+            setTimeout(() => {
+                if (parsed.amount) {
+                    const amountField = document.getElementById('expenseAmount');
+                    if (amountField) {
+                        amountField.value = parsed.amount;
+                    }
                 }
-            }
-            
-            if (parsed.notes) {
-                const descriptionField = document.getElementById('expenseDescription');
-                if (descriptionField) {
-                    descriptionField.value = parsed.notes;
+                
+                if (parsed.date) {
+                    const dateField = document.getElementById('expenseDate');
+                    if (dateField) {
+                        dateField.value = parsed.date;
+                    }
                 }
-            }
-        }, 300);
+                
+                if (parsed.notes) {
+                    const descriptionField = document.getElementById('expenseDescription');
+                    if (descriptionField) {
+                        descriptionField.value = parsed.notes;
+                    }
+                }
+            }, 300);
+        }
     }, 300);
     
     closeSharedTextDialog();
-    showNotification('Shared text added to Expenses form');
+    if (sharedTextData.type === 'text') {
+        showNotification('Shared text added to Expenses form');
+    } else {
+        showNotification('Image shared - please enter expense details manually');
+    }
 }
 
 // Add alias for renamed function
