@@ -147,22 +147,41 @@ window.originalMonthlyData = null;
 window.originalExpenseData = null;
 window.originalMoveOutData = null;
 
-// Initialize app
+// Initialize app when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('🔧 DOM loaded, setting initial tab state...');
+    console.log('🚀 DOM Content Loaded - Initializing app...');
     
-    // Initialize forms first
-    initializeForms();
+    // Handle redirect result for mobile sign-in
+    firebase.auth().getRedirectResult().then((result) => {
+        if (result.user) {
+            console.log('🔐 Mobile redirect sign-in successful:', result.user.email);
+            showNotification(`Welcome, ${result.user.displayName || result.user.email}!`);
+        } else if (result.credential) {
+            console.log('🔐 Redirect result with credential but no user');
+        }
+    }).catch((error) => {
+        console.error('🔐 Redirect result error:', error);
+        if (error.code !== 'auth/no-auth-in-progress') {
+            let errorMsg = 'Login failed';
+            if (error.code === 'auth/redirect-cancelled-by-user') {
+                errorMsg = 'Sign-in was cancelled.';
+            } else if (error.message) {
+                errorMsg = error.message;
+            }
+            showNotification(errorMsg);
+        }
+    });
     
     // Check authentication status
     checkAuthStatus();
     
-    // Initialize version display
-    updateVersionDisplay();
-    initializeAutoUpdateMenu();
+    // Initialize forms
+    initializeForms();
     
-    // Handle shared text if present
+    // Handle shared text on app load
     handleSharedText();
+    
+    console.log('✅ App initialization complete');
 });
 
 // Initialize forms and event listeners
@@ -251,10 +270,9 @@ function checkAuthStatus() {
             setupRealtimeSync();
         } else {
             currentUser = null;
-            console.log('🔐 No user - hiding auth and app containers');
-            // For new users, hide both auth and app initially
-            // Let user click "Get Started" first to show auth
-            document.getElementById('authContainer').style.display = 'none';
+            console.log('🔐 No user - showing auth container, hiding app');
+            // Show auth container for sign-in, hide app content
+            document.getElementById('authContainer').style.display = 'flex';
             document.getElementById('appContent').style.display = 'none';
         }
     });
@@ -266,9 +284,22 @@ async function loginWithGoogle() {
         showNotification('Opening Google Sign-In...');
         console.log('🔐 Attempting Google Sign-In...');
         
+        // Check if mobile device and use redirect instead of popup
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
         // Ensure auth persistence is set to local so user remains signed in after refresh
         await firebase.auth().setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-        const result = await firebase.auth().signInWithPopup(googleProvider);
+        
+        let result;
+        if (isMobile) {
+            console.log('📱 Mobile device detected, using redirect sign-in');
+            await firebase.auth().signInWithRedirect(googleProvider);
+            // The redirect will handle the rest
+            return;
+        } else {
+            console.log('💻 Desktop detected, using popup sign-in');
+            result = await firebase.auth().signInWithPopup(googleProvider);
+        }
         
         console.log('🔐 Sign-In successful:', result.user.email);
         showNotification(`Welcome, ${result.user.displayName || result.user.email}!`);
@@ -282,6 +313,8 @@ async function loginWithGoogle() {
         } else if (error && error.code === 'auth/popup-blocked') {
             errorMsg = 'Pop-up was blocked. Please allow pop-ups and try again.';
         } else if (error && error.code === 'auth/popup-closed-by-user') {
+            errorMsg = 'Sign-in was cancelled.';
+        } else if (error && error.code === 'auth/redirect-cancelled-by-user') {
             errorMsg = 'Sign-in was cancelled.';
         } else if (error && error.message) {
             errorMsg = error.message;
@@ -5967,16 +6000,16 @@ function editMonthly(id) {
     }
     
     console.log('✅ Found payment:', payment.amount, 'in property:', paymentProperty.name);
-    console.log('🔍 About to show monthlyEditOverlay');
+    console.log('🔍 About to show rentEditOverlay');
     
     // Show overlay and lock background scroll
-    const overlay = document.getElementById('monthlyEditOverlay');
+    const overlay = document.getElementById('rentEditOverlay');
     if (overlay) {
         overlay.classList.remove('hidden');
         document.body.style.overflow = 'hidden';
         console.log('✅ Overlay shown successfully');
     } else {
-        console.error('❌ monthlyEditOverlay not found!');
+        console.error('❌ rentEditOverlay not found!');
         return;
     }
     

@@ -7,7 +7,7 @@
 
 body {
     font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-    background: #e0e5ec;
+    background: #ffffff;
     min-height: 100vh;
     color: #2d3748;
     overflow-x: hidden;
@@ -18,7 +18,7 @@ body {
     padding: 12px 20px;
     border: none;
     border-radius: 10px;
-    background: #e0e5ec;
+    background: #ffffff;
     color: #2d3748;
     font-weight: 600;
     cursor: pointer;
@@ -38,27 +38,27 @@ body {
 }
 
 .btn-primary {
-    background: #e0e5ec;
+    background: #ffffff;
     color: #2d3748;
 }
 
 .btn-secondary {
-    background: #e0e5ec;
+    background: #ffffff;
     color: #2d3748;
 }
 
 .btn-success {
-    background: #e0e5ec;
+    background: #ffffff;
     color: #2d3748;
 }
 
 .btn-danger {
-    background: #e0e5ec;
+    background: #ffffff;
     color: #2d3748;
 }
 
 .btn-warning {
-    background: #e0e5ec;
+    background: #ffffff;
     color: #2d3748;
 }
 
@@ -76,7 +76,7 @@ input, textarea, select {
     padding: 12px;
     border: none;
     border-radius: 10px;
-    background: #e0e5ec;
+    background: #ffffff;
     color: #2d3748;
     box-shadow: inset 4px 4px 6px #c8ccd1, inset -4px -4px 6px #f0f5fa;
     font-size: 14px;
@@ -90,7 +90,7 @@ input:focus, textarea:focus, select:focus {
 
 /* ===== NEUMORPHIC CARDS ===== */
 .form-card, .entry-card, .property-card {
-    background: #e0e5ec;
+    background: #ffffff;
     border-radius: 20px;
     padding: 20px;
     margin-bottom: 16px;
@@ -166,7 +166,7 @@ input:focus, textarea:focus, select:focus {
 
 /* ===== NEUMORPHIC TABS ===== */
 .navigation {
-    background: #e0e5ec;
+    background: #ffffff;
     border-radius: 20px;
     margin: 16px;
     padding: 8px;
@@ -216,14 +216,14 @@ input:focus, textarea:focus, select:focus {
 .app-container {
     max-width: 100%;
     margin: 0 auto;
-    background: #e0e5ec;
+    background: #ffffff;
     min-height: 100vh;
     position: relative;
 }
 
 /* ===== HEADER ===== */
 .app-header {
-    background: #e0e5ec;
+    background: #ffffff;
     color: #2d3748;
     padding: 20px 16px;
     border-radius: 20px;
@@ -636,7 +636,7 @@ body.sidebar-open {
 /* ===== TAB NAVIGATION ===== */
 .tab-navigation {
     display: flex;
-    background: #e0e5ec;
+    background: #ffffff;
     border-radius: 20px;
     padding: 8px;
     margin: 16px;
@@ -663,7 +663,7 @@ body.sidebar-open {
     flex: 1;
     min-width: 120px;
     padding: 12px;
-    background: #e0e5ec;
+    background: #ffffff;
     border: none;
     border-radius: 12px;
     font-size: 0.875rem;
@@ -1189,7 +1189,7 @@ button:disabled {
     padding: 12px 20px;
     border: none;
     border-radius: 10px;
-    background: #e0e5ec;
+    background: #ffffff;
     color: #2d3748;
     font-weight: 600;
     cursor: pointer;
@@ -1211,7 +1211,7 @@ button:disabled {
 }
 
 .btn-primary {
-    background: #e0e5ec;
+    background: #ffffff;
     color: #2d3748;
 }
 
@@ -1220,7 +1220,7 @@ button:disabled {
 }
 
 .btn-secondary {
-    background: #e0e5ec;
+    background: #ffffff;
     color: #2d3748;
 }
 
@@ -1229,7 +1229,7 @@ button:disabled {
 }
 
 .btn-success {
-    background: #e0e5ec;
+    background: #ffffff;
     color: #2d3748;
 }
 
@@ -1238,7 +1238,7 @@ button:disabled {
 }
 
 .btn-danger {
-    background: #e0e5ec;
+    background: #ffffff;
     color: #2d3748;
 }
 
@@ -1247,7 +1247,7 @@ button:disabled {
 }
 
 .btn-warning {
-    background: #e0e5ec;
+    background: #ffffff;
     color: #2d3748;
 }
 
@@ -1649,7 +1649,7 @@ button:disabled {
 .stat {
     font-size: 0.85rem;
     padding: 4px 8px;
-    background: #e0e5ec;
+    background: #ffffff;
     border-radius: 6px;
     box-shadow: 2px 2px 4px #c2c8d0, -2px -2px 4px #ffffff;
     color: #2d3748;
@@ -1673,7 +1673,7 @@ button:disabled {
 .edit-overlay {
     position: fixed;
     inset: 0;
-    background: #e0e5ec;
+    background: #ffffff;
     z-index: 3000;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
@@ -1742,7 +1742,7 @@ button:disabled {
     padding: 12px 16px;
     text-align: left;
     border: none;
-    background: #e0e5ec;
+    background: #ffffff;
     color: #2d3748;
     border-radius: 12px;
     cursor: pointer;
@@ -1775,7 +1775,7 @@ button:disabled {
 }
 
 .menu-section .slideout-menu .logout {
-    background: #e0e5ec;
+    background: #ffffff;
     color: #2d3748;
     margin-top: 12px;
     box-shadow: 6px 6px 12px #c2c8d0, -6px -6px 12px #ffffff;
@@ -1845,7 +1845,7 @@ button:disabled {
 
 .version-info {
     padding: 8px 12px;
-    background: #e0e5ec;
+    background: #ffffff;
     border-radius: 12px;
     box-shadow: inset 2px 2px 4px #c8ccd1, inset -2px -2px 4px #f0f5fa;
 }
@@ -1910,7 +1910,7 @@ button:disabled {
     position: fixed;
     top: 20px;
     right: 20px;
-    background: #e0e5ec;
+    background: #ffffff;
     border-radius: 20px;
     box-shadow: 10px 10px 30px #c2c8d0, -10px -10px 30px #ffffff;
     padding: 20px;
@@ -2009,12 +2009,12 @@ button:disabled {
     justify-content: center;
     align-items: center;
     min-height: 100vh;
-    background: #e0e5ec;
+    background: #ffffff;
     padding: 20px;
 }
 
 .auth-card {
-    background: #e0e5ec;
+    background: #ffffff;
     padding: 40px;
     border-radius: 20px;
     box-shadow: 10px 10px 30px #c2c8d0, -10px -10px 30px #ffffff;
@@ -2072,7 +2072,7 @@ button:disabled {
     width: 100%;
     height: 100%;
     background: linear-gradient(145deg, #ffffff, #ffffff);
-    box-shadow:  20px 20px 60px #bebebe, -20px -20px 60px #ffffff;
+    box-shadow: none;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -2109,7 +2109,7 @@ button:disabled {
 }
 
 .splash-get-started {
-    background: #e0e5ec;
+    background: #ffffff;
     color: #2d3748;
     border: none;
     padding: 16px 32px;
@@ -2502,7 +2502,7 @@ overflow: hidden;
     height: 44px;
     border-radius: 50%;
     border: none;
-    background: #e0e5ec;
+    background: #ffffff;
     color: #2d3748;
     font-size: 20px;
     font-weight: bold;
@@ -2532,7 +2532,7 @@ overflow: hidden;
     padding: 12px 20px;
     border: none;
     border-radius: 10px;
-    background: #e0e5ec;
+    background: #ffffff;
     color: #2d3748;
     cursor: pointer;
     font-weight: 600;
