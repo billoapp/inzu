@@ -31,6 +31,31 @@
         <button class="splash-get-started" onclick="hideSplash()">Get Started</button>
     </div>
 
+    <!-- Shared Text Dialog -->
+    <div id="sharedTextDialog" class="dialog-overlay" style="display: none;">
+        <div class="dialog-card">
+            <div class="dialog-header">
+                <h3>Add Shared Text</h3>
+                <button class="dialog-close" onclick="closeSharedTextDialog()">×</button>
+            </div>
+            <div class="dialog-content">
+                <p>Where would you like to add this shared text?</p>
+                <div class="shared-text-preview" id="sharedTextPreview"></div>
+                <div class="dialog-actions">
+                    <button class="btn btn-primary" onclick="addSharedTextToRent()">
+                        💰 Add to Rent
+                    </button>
+                    <button class="btn btn-secondary" onclick="addSharedTextToExpenses()">
+                        🧾 Add to Expenses
+                    </button>
+                    <button class="btn btn-outline" onclick="closeSharedTextDialog()">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Auth Container -->
     <div id="authContainer" class="auth-container">
         <div class="auth-card">
@@ -137,7 +162,7 @@
 
         <nav class="tab-navigation" id="propertyNavigation" style="display: none;">
             <button class="tab-button" onclick="showTab('tenants', this)">Tenants</button>
-            <button class="tab-button" onclick="showTab('monthly', this)">Monthly</button>
+            <button class="tab-button" onclick="showTab('monthly', this)">Rent</button>
             <button class="tab-button" onclick="showTab('expenses', this)">Expenses</button>
             <button class="tab-button" onclick="showTab('summary', this)">Summary</button>
         </nav>
@@ -459,100 +484,100 @@
                 </div>
             </div>
 
-            <!-- Monthly Tab -->
+            <!-- Rent Tab -->
             <div id="monthly" class="tab-content" style="display: none;">
                 <!-- Back to Properties button inside tab content -->
-                <div id="monthlyBackButton" style="display: none; margin-bottom: 16px;">
+                <div id="rentBackButton" style="display: none; margin-bottom: 16px;">
                     <button class="btn-back-circle" onclick="backToProperties()">←</button>
                 </div>
                 
                 <!-- Property Header (shown when property is selected) -->
-                <div id="monthlyPropertyHeader" style="display: none; margin-bottom: 16px;">
+                <div id="rentPropertyHeader" style="display: none; margin-bottom: 16px;">
                     <div class="form-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px;">
-                        <h2 id="monthlyPropertyName" style="margin: 0; font-size: 1.25rem; font-weight: 600;">Property Name</h2>
-                        <p id="monthlyPropertyAddress" style="margin: 8px 0 0 0; opacity: 0.9; font-size: 0.9rem;">Address</p>
+                        <h2 id="rentPropertyName" style="margin: 0; font-size: 1.25rem; font-weight: 600;">Property Name</h2>
+                        <p id="rentPropertyAddress" style="margin: 8px 0 0 0; opacity: 0.9; font-size: 0.9rem;">Address</p>
                     </div>
                 </div>
 
                 <!-- Toggle for the add-monthly form -->
                 <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
-                    <button class="toggle-btn" id="monthlyToggleBtn" onclick="toggleMonthlyForm()">➕ Record Payment</button>
+                    <button class="toggle-btn" id="rentToggleBtn" onclick="toggleRentForm()">➕ Record Payment</button>
                 </div>
                 
                 <!-- Add Monthly Form (collapsible) -->
-                <div id="monthlyFormCollapsible" class="collapsed" style="overflow: hidden; transition: max-height 0.3s ease, opacity 0.3s ease; max-height: 0; opacity: 0;">
+                <div id="rentFormCollapsible" class="collapsed" style="overflow: hidden; transition: max-height 0.3s ease, opacity 0.3s ease; max-height: 0; opacity: 0;">
                     <div class="form-card">
-                        <h3>Record Monthly Payment</h3>
-                        <form id="monthlyForm">
+                        <h3>Record Rent Payment</h3>
+                        <form id="rentForm">
                             <div class="form-group">
-                                <label for="monthlyTenant">Select Tenant</label>
-                                <select id="monthlyTenant" name="monthlyTenant" required>
+                                <label for="rentTenant">Select Tenant</label>
+                                <select id="rentTenant" name="rentTenant" required>
                                     <option value="">Choose a tenant...</option>
                                 </select>
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label for="monthlyAmount">Amount (Ksh)</label>
-                                    <input type="number" id="monthlyAmount" name="monthlyAmount" placeholder="50000" required>
+                                    <label for="rentAmount">Amount (Ksh)</label>
+                                    <input type="number" id="rentAmount" name="rentAmount" placeholder="50000" required>
                                 </div>
                                 <div class="form-group">
-                                    <label for="monthlyDate">Date</label>
-                                    <input type="date" id="monthlyDate" name="monthlyDate" required>
+                                    <label for="rentDate">Date</label>
+                                    <input type="date" id="rentDate" name="rentDate" required>
                                 </div>
                             </div>
                             <div class="form-group">
-                                <label for="monthlyNotes">Notes</label>
-                                <input type="text" id="monthlyNotes" name="monthlyNotes" placeholder="Payment method, etc.">
+                                <label for="rentNotes">Notes</label>
+                                <input type="text" id="rentNotes" name="rentNotes" placeholder="Payment method, etc.">
                             </div>
                             <div class="form-actions">
-                                <button type="button" class="btn btn-secondary" onclick="toggleMonthlyForm()">Cancel</button>
+                                <button type="button" class="btn btn-secondary" onclick="toggleRentForm()">Cancel</button>
                                 <button type="submit" class="btn btn-success btn-full" id="recordPaymentBtn">Record Payment</button>
                             </div>
                         </form>
                     </div>
                 </div>
 
-                <!-- Monthly Edit Overlay -->
-                <div id="monthlyEditOverlay" class="edit-overlay hidden">
+                <!-- Rent Edit Overlay -->
+                <div id="rentEditOverlay" class="edit-overlay hidden">
                     <div class="edit-page">
                         <div class="form-card">
-                            <h3 id="monthlyFormTitle">Record Monthly Payment</h3>
-                            <form id="monthlyEditForm">
+                            <h3 id="rentFormTitle">Record Rent Payment</h3>
+                            <form id="rentEditForm">
                                 <div class="form-group">
-                                    <label for="monthlyTenantEdit">Select Tenant</label>
-                                    <select id="monthlyTenantEdit" name="monthlyTenant" required>
+                                    <label for="rentTenantEdit">Select Tenant</label>
+                                    <select id="rentTenantEdit" name="rentTenant" required>
                                         <option value="">Choose a tenant...</option>
                                     </select>
                                 </div>
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label for="monthlyAmountEdit">Amount (Ksh)</label>
-                                        <input type="number" id="monthlyAmountEdit" name="monthlyAmount" placeholder="50000" required>
+                                        <label for="rentAmountEdit">Amount (Ksh)</label>
+                                        <input type="number" id="rentAmountEdit" name="rentAmount" placeholder="50000" required>
                                     </div>
                                     <div class="form-group">
-                                        <label for="monthlyDateEdit">Date</label>
-                                        <input type="date" id="monthlyDateEdit" name="monthlyDate" required>
+                                        <label for="rentDateEdit">Date</label>
+                                        <input type="date" id="rentDateEdit" name="rentDate" required>
                                     </div>
                                 </div>
                                 <div class="form-group">
-                                    <label for="monthlyNotesEdit">Notes</label>
-                                    <input type="text" id="monthlyNotesEdit" name="monthlyNotes" placeholder="Payment method, etc.">
+                                    <label for="rentNotesEdit">Notes</label>
+                                    <input type="text" id="rentNotesEdit" name="rentNotes" placeholder="Payment method, etc.">
                                 </div>
                                 <div class="form-actions">
-                                    <button type="button" id="monthlyCancelBtn" class="btn btn-secondary">Cancel</button>
+                                    <button type="button" id="rentCancelBtn" class="btn btn-secondary">Cancel</button>
                                     <button type="submit" class="btn btn-success btn-full">Record Payment</button>
                                 </div>
                             </form>
                         </div>
                     </div>
                 </div>
-                <!-- End Monthly Edit Overlay -->
+                <!-- End Rent Edit Overlay -->
 
                 <div class="entries-list" id="monthlyList">
                     <div class="empty-state">
                         <div class="empty-state-icon">💰</div>
                         <div class="empty-state-text">No payments recorded</div>
-                        <div class="empty-state-subtext">Start tracking monthly payments</div>
+                        <div class="empty-state-subtext">Start tracking rent payments</div>
                     </div>
                 </div>
             </div>
@@ -716,8 +741,8 @@
                 </div>
 
                 <div class="form-card">
-                    <h3>Monthly Summary</h3>
-                    <div id="monthlySummaryCards">
+                    <h3>Rent Summary</h3>
+                    <div id="rentSummaryCards">
                         <div class="empty-state">
                             <div class="empty-state-icon">📈</div>
                             <div class="empty-state-text">No data to summarize</div>

@@ -160,6 +160,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize version display
     updateVersionDisplay();
     initializeAutoUpdateMenu();
+    
+    // Handle shared text if present
+    handleSharedText();
 });
 
 // Initialize forms and event listeners
@@ -1062,7 +1065,7 @@ function getPropertyGradient(propertyId) {
 function updatePropertyHeaderColors(property) {
     const headers = [
         { id: 'tenantsPropertyHeader', cardId: 'tenantsPropertyHeader' },
-        { id: 'monthlyPropertyHeader', cardId: 'monthlyPropertyHeader' },
+        { id: 'rentPropertyHeader', cardId: 'rentPropertyHeader' },
         { id: 'expensesPropertyHeader', cardId: 'expensesPropertyHeader' },
         { id: 'summaryPropertyHeader', cardId: 'summaryPropertyHeader' }
     ];
@@ -1141,14 +1144,14 @@ function updatePropertyHeaders(property) {
         if (tenantsPropertyAddress) tenantsPropertyAddress.textContent = property.address || '';
     }
     
-    // Update monthly tab header
-    const monthlyPropertyHeader = document.getElementById('monthlyPropertyHeader');
-    if (monthlyPropertyHeader) {
-        monthlyPropertyHeader.style.display = 'block';
-        const monthlyPropertyName = document.getElementById('monthlyPropertyName');
-        const monthlyPropertyAddress = document.getElementById('monthlyPropertyAddress');
-        if (monthlyPropertyName) monthlyPropertyName.textContent = property.name || 'Property';
-        if (monthlyPropertyAddress) monthlyPropertyAddress.textContent = property.address || '';
+    // Update rent tab header
+    const rentPropertyHeader = document.getElementById('rentPropertyHeader');
+    if (rentPropertyHeader) {
+        rentPropertyHeader.style.display = 'block';
+        const rentPropertyName = document.getElementById('rentPropertyName');
+        const rentPropertyAddress = document.getElementById('rentPropertyAddress');
+        if (rentPropertyName) rentPropertyName.textContent = property.name || 'Property';
+        if (rentPropertyAddress) rentPropertyAddress.textContent = property.address || '';
     }
     
     // Update expenses tab header
@@ -1172,7 +1175,7 @@ function updatePropertyHeaders(property) {
     }
     
     // Show back buttons
-    const backButtons = ['tenantsBackButton', 'monthlyBackButton', 'expensesBackButton', 'summaryBackButton'];
+    const backButtons = ['tenantsBackButton', 'rentBackButton', 'expensesBackButton', 'summaryBackButton'];
     backButtons.forEach(btnId => {
         const btn = document.getElementById(btnId);
         if (btn) btn.style.display = 'block';
@@ -1985,9 +1988,9 @@ function backToProperties() {
     const tenantsPropertyHeader = document.getElementById('tenantsPropertyHeader');
     if (tenantsPropertyHeader) tenantsPropertyHeader.style.display = 'none';
     
-    // Hide: Property header in monthly tab
-    const monthlyPropertyHeader = document.getElementById('monthlyPropertyHeader');
-    if (monthlyPropertyHeader) monthlyPropertyHeader.style.display = 'none';
+    // Hide: Property header in rent tab
+    const rentPropertyHeader = document.getElementById('rentPropertyHeader');
+    if (rentPropertyHeader) rentPropertyHeader.style.display = 'none';
     
     // Hide: Property header in expenses tab
     const expensesPropertyHeader = document.getElementById('expensesPropertyHeader');
@@ -2001,8 +2004,8 @@ function backToProperties() {
     const tenantsBackButton = document.getElementById('tenantsBackButton');
     if (tenantsBackButton) tenantsBackButton.style.display = 'none';
     
-    const monthlyBackButton = document.getElementById('monthlyBackButton');
-    if (monthlyBackButton) monthlyBackButton.style.display = 'none';
+    const rentBackButton = document.getElementById('rentBackButton');
+    if (rentBackButton) rentBackButton.style.display = 'none';
     
     const expensesBackButton = document.getElementById('expensesBackButton');
     if (expensesBackButton) expensesBackButton.style.display = 'none';
@@ -2390,7 +2393,7 @@ function showTab(tabName, buttonElement) {
         if (tenantsPropertyHeader) tenantsPropertyHeader.style.display = 'none';
         
         // Hide: Back buttons
-        const backButtons = ['tenantsBackButton', 'monthlyBackButton', 'expensesBackButton', 'summaryBackButton'];
+        const backButtons = ['tenantsBackButton', 'rentBackButton', 'expensesBackButton', 'summaryBackButton'];
         backButtons.forEach(btnId => {
             const btn = document.getElementById(btnId);
             if (btn) btn.style.display = 'none';
@@ -2493,7 +2496,7 @@ function initializeNavigation() {
     });
     
     // Hide inline back buttons in all property management tabs
-    const backButtons = ['tenantsBackButton', 'monthlyBackButton', 'expensesBackButton', 'summaryBackButton'];
+    const backButtons = ['tenantsBackButton', 'rentBackButton', 'expensesBackButton', 'summaryBackButton'];
     backButtons.forEach(btnId => {
         const btn = document.getElementById(btnId);
         if (btn) {
@@ -2509,11 +2512,11 @@ function initializeNavigation() {
         propertyHeader.classList.remove('visible');
     }
     
-    // Hide property header in monthly tab
-    const monthlyPropertyHeader = document.getElementById('monthlyPropertyHeader');
-    if (monthlyPropertyHeader) {
-        monthlyPropertyHeader.style.display = 'none';
-        monthlyPropertyHeader.classList.remove('visible');
+    // Hide property header in rent tab
+    const rentPropertyHeader = document.getElementById('rentPropertyHeader');
+    if (rentPropertyHeader) {
+        rentPropertyHeader.style.display = 'none';
+        rentPropertyHeader.classList.remove('visible');
     }
     
     // Hide property header in expenses tab
@@ -2806,14 +2809,14 @@ function initializeForms() {
         cancelBtn.addEventListener('click', cancelTenantEdit);
     }
     
-    // Monthly form
-    document.getElementById('monthlyForm').addEventListener('submit', function(e) {
+    // Rent form
+    document.getElementById('rentForm').addEventListener('submit', function(e) {
         e.preventDefault();
         addMonthly();
     });
 
     // Monthly edit form
-    const monthlyEditForm = document.getElementById('monthlyEditForm');
+    const monthlyEditForm = document.getElementById('rentEditForm');
     if (monthlyEditForm) {
         monthlyEditForm.addEventListener('submit', function(e) {
             e.preventDefault();
@@ -2821,36 +2824,36 @@ function initializeForms() {
         });
     }
 
-    // Add change detection listeners to monthly form fields
-    const monthlyFormFields = ['monthlyTenant', 'monthlyAmount', 'monthlyDate', 'monthlyNotes'];
-    const monthlyEditFormFields = ['monthlyTenantEdit', 'monthlyAmountEdit', 'monthlyDateEdit', 'monthlyNotesEdit'];
+    // Add change detection listeners to rent form fields
+    const rentFormFields = ['rentTenant', 'rentAmount', 'rentDate', 'rentNotes'];
+    const rentEditFormFields = ['rentTenantEdit', 'rentAmountEdit', 'rentDateEdit', 'rentNotesEdit'];
     
-    monthlyFormFields.forEach(fieldId => {
+    rentFormFields.forEach(fieldId => {
         const field = document.getElementById(fieldId);
         if (field) {
             field.addEventListener('input', () => {
-                const currentState = JSON.stringify(Array.from(new FormData(document.getElementById('monthlyForm'))));
+                const currentState = JSON.stringify(Array.from(new FormData(document.getElementById('rentForm'))));
                 hasMonthlyFormChanged = currentState !== monthlyFormInitialState;
                 updateMonthlyFormButtons();
             });
             field.addEventListener('change', () => {
-                const currentState = JSON.stringify(Array.from(new FormData(document.getElementById('monthlyForm'))));
+                const currentState = JSON.stringify(Array.from(new FormData(document.getElementById('rentForm'))));
                 hasMonthlyFormChanged = currentState !== monthlyFormInitialState;
                 updateMonthlyFormButtons();
             });
         }
     });
 
-    monthlyEditFormFields.forEach(fieldId => {
+    rentEditFormFields.forEach(fieldId => {
         const field = document.getElementById(fieldId);
         if (field) {
             field.addEventListener('input', () => {
-                const currentState = JSON.stringify(Array.from(new FormData(document.getElementById('monthlyEditForm'))));
+                const currentState = JSON.stringify(Array.from(new FormData(document.getElementById('rentEditForm'))));
                 hasMonthlyFormChanged = currentState !== monthlyFormInitialState;
                 updateMonthlyFormButtons();
             });
             field.addEventListener('change', () => {
-                const currentState = JSON.stringify(Array.from(new FormData(document.getElementById('monthlyEditForm'))));
+                const currentState = JSON.stringify(Array.from(new FormData(document.getElementById('rentEditForm'))));
                 hasMonthlyFormChanged = currentState !== monthlyFormInitialState;
                 updateMonthlyFormButtons();
             });
@@ -2858,8 +2861,8 @@ function initializeForms() {
     });
     
     // Add proper event listener for Cancel button
-    const monthlyCancelBtn = document.getElementById('monthlyCancelBtn');
-    console.log('🔍 monthlyCancelBtn found:', !!monthlyCancelBtn);
+    const monthlyCancelBtn = document.getElementById('rentCancelBtn');
+    console.log('🔍 rentCancelBtn found:', !!monthlyCancelBtn);
     if (monthlyCancelBtn) {
         monthlyCancelBtn.addEventListener('click', function() {
             console.log('🔄 Cancel button clicked!');
@@ -3131,8 +3134,8 @@ function toggleTenantForm() {
 }
 
 function toggleMonthlyForm() {
-    const el = document.getElementById('monthlyFormCollapsible');
-    const btn = document.getElementById('monthlyToggleBtn');
+    const el = document.getElementById('rentFormCollapsible');
+    const btn = document.getElementById('rentToggleBtn');
     if (!el) return;
 
     const isCollapsed = el.classList.contains('collapsed');
@@ -3815,9 +3818,9 @@ function addMonthly() {
     const isEditMode = window.editingMonthlyId !== null;
     const formPrefix = isEditMode ? 'Edit' : '';
     
-    const tenantId = document.getElementById('monthlyTenant' + formPrefix).value;
-    const amount = document.getElementById('monthlyAmount' + formPrefix).value;
-    const date = document.getElementById('monthlyDate' + formPrefix).value;
+    const tenantId = document.getElementById('rentTenant' + formPrefix).value;
+    const amount = document.getElementById('rentAmount' + formPrefix).value;
+    const date = document.getElementById('rentDate' + formPrefix).value;
     
     // Validate tenant selection
     if (!tenantId) {
@@ -3842,7 +3845,7 @@ function addMonthly() {
         tenantId: tenantId,
         amount: amount,
         date: date,
-        notes: document.getElementById('monthlyNotes' + formPrefix).value,
+        notes: document.getElementById('rentNotes' + formPrefix).value,
         createdAt: new Date().toISOString()
     };
 
@@ -3865,41 +3868,41 @@ function addMonthly() {
     
     if (window.editingMonthlyId === null && selectedProperty.monthly[selectedProperty.monthly.length - 1].id === payment.id) {
         // This was a new payment addition, reset form
-        document.getElementById('monthlyForm').reset();
+        document.getElementById('rentForm').reset();
         setDefaultDates();
         
         // Reset save button text
-        const monthlySaveBtn = document.querySelector('#monthlyForm button[type="submit"]');
-        monthlySaveBtn.textContent = 'Record Payment';
+        const rentSaveBtn = document.querySelector('#rentForm button[type="submit"]');
+        rentSaveBtn.textContent = 'Record Payment';
         
         // Hide cancel button
-        document.getElementById('monthlyCancelBtn').classList.add('hidden');
+        document.getElementById('rentCancelBtn').classList.add('hidden');
     } else {
         // This was an update, close overlay instead
-        document.getElementById('monthlyEditOverlay').classList.add('hidden');
+        document.getElementById('rentEditOverlay').classList.add('hidden');
         document.body.style.overflow = '';
         
         // Reset edit form
-        document.getElementById('monthlyEditForm').reset();
+        document.getElementById('rentEditForm').reset();
         
         // 🔑 CRITICAL: Clean up tenant display and show dropdown again
-        const tenantDisplay = document.getElementById('monthlyTenantDisplay');
+        const tenantDisplay = document.getElementById('rentTenantDisplay');
         if (tenantDisplay) {
             tenantDisplay.remove();
         }
         
-        const tenantSelect = document.getElementById('monthlyTenantEdit');
+        const tenantSelect = document.getElementById('rentTenantEdit');
         tenantSelect.style.display = 'block';
         
         // Reset form heading
-        document.getElementById('monthlyFormTitle').textContent = 'Record Monthly Payment';
+        document.getElementById('rentFormTitle').textContent = 'Record Rent Payment';
         
         // Reset save button text
-        const monthlySaveBtn = document.querySelector('#monthlyEditForm button[type="submit"]');
-        monthlySaveBtn.textContent = 'Record Payment';
+        const rentSaveBtn = document.querySelector('#rentEditForm button[type="submit"]');
+        rentSaveBtn.textContent = 'Record Rent Payment';
         
         // Hide cancel button
-        document.getElementById('monthlyCancelBtn').classList.add('hidden');
+        document.getElementById('rentCancelBtn').classList.add('hidden');
         
         showNotification('Payment updated successfully!');
     }
@@ -4466,7 +4469,8 @@ function renderMoveOuts() {
 
 // Update tenant selects (including summary tenant select)
 function updateTenantSelects() {
-    const monthlySelect = document.getElementById('monthlyTenant');
+    const rentSelect = document.getElementById('rentTenant');
+    const rentEditSelect = document.getElementById('rentTenantEdit');
 
     // Get tenants from selected property using hierarchical structure
     let propertyTenants = [];
@@ -4489,10 +4493,11 @@ function updateTenantSelects() {
 
     const tenantOptions = tenantsList.map(tenant => `<option value="${tenant.id}">${tenant.name} - ${tenant.unit}</option>`).join('');
     
-    // For monthly, only show active tenants
+    // For rent, only show active tenants
     const options = '<option value="">Choose a tenant...</option>' + tenantOptions;
     
-    if (monthlySelect) monthlySelect.innerHTML = options;
+    if (rentSelect) rentSelect.innerHTML = options;
+    if (rentEditSelect) rentEditSelect.innerHTML = options;
 }
 
 // ===== ARCHIVE FUNCTIONS =====
@@ -4738,9 +4743,9 @@ function updateSummary() {
         netEl.textContent = 'Ksh 0';
         
         // Update monthly summary to show no property selected
-        const monthlySummaryCards = document.getElementById('monthlySummaryCards');
-        if (monthlySummaryCards) {
-            monthlySummaryCards.innerHTML = `
+        const rentSummaryCards = document.getElementById('rentSummaryCards');
+        if (rentSummaryCards) {
+            rentSummaryCards.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-state-icon">🏢</div>
                     <div class="empty-state-text">No property selected</div>
@@ -4803,8 +4808,8 @@ function updateSummary() {
     console.log('✅ Updated net element:', netEl.textContent);
     
     // Update monthly summary cards for selected property
-    const monthlySummaryCards = document.getElementById('monthlySummaryCards');
-    if (monthlySummaryCards) {
+    const rentSummaryCards = document.getElementById('rentSummaryCards');
+    if (rentSummaryCards) {
         // Group monthly payments by month
         const monthlyData = {};
         
@@ -4842,7 +4847,7 @@ function updateSummary() {
         const sortedMonths = Object.keys(monthlyData).sort((a, b) => b.localeCompare(a));
         
         if (sortedMonths.length === 0) {
-            monthlySummaryCards.innerHTML = `
+            rentSummaryCards.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-state-icon">📈</div>
                     <div class="empty-state-text">No data to summarize</div>
@@ -4879,7 +4884,7 @@ function updateSummary() {
             });
             
             cardsHTML += '</div>';
-            monthlySummaryCards.innerHTML = cardsHTML;
+            rentSummaryCards.innerHTML = cardsHTML;
         }
         
         console.log('✅ Updated monthly summary cards for selected property');
@@ -5550,16 +5555,16 @@ function updateTenantFormButtons() {
 
 function captureMonthlyFormState() {
     // Use edit form if we're in edit mode, otherwise use regular form
-    const form = document.getElementById('monthlyEditForm') || document.getElementById('monthlyForm');
+    const form = document.getElementById('rentEditForm') || document.getElementById('rentForm');
     monthlyFormInitialState = JSON.stringify(
         Array.from(new FormData(form))
     );
 }
 
 function updateMonthlyFormButtons() {
-    const cancelBtn = document.getElementById('monthlyCancelBtn');
+    const cancelBtn = document.getElementById('rentCancelBtn');
     // Use edit form if it exists, otherwise use regular form
-    const saveBtn = document.querySelector('#monthlyEditForm button[type="submit"]') || document.querySelector('#monthlyForm button[type="submit"]');
+    const saveBtn = document.querySelector('#rentEditForm button[type="submit"]') || document.querySelector('#rentForm button[type="submit"]');
     
     // Cancel button is always enabled
     if (cancelBtn) {
@@ -5976,13 +5981,13 @@ function editMonthly(id) {
     }
     
     // Fill form with payment data
-    document.getElementById('monthlyTenantEdit').value = payment.tenantId;
-    document.getElementById('monthlyAmountEdit').value = payment.amount;
-    document.getElementById('monthlyDateEdit').value = payment.date;
-    document.getElementById('monthlyNotesEdit').value = payment.notes || '';
+    document.getElementById('rentTenantEdit').value = payment.tenantId;
+    document.getElementById('rentAmountEdit').value = payment.amount;
+    document.getElementById('rentDateEdit').value = payment.date;
+    document.getElementById('rentNotesEdit').value = payment.notes || '';
     
     // 🔑 CRITICAL: Hide tenant dropdown in edit mode and show tenant name
-    const tenantSelect = document.getElementById('monthlyTenantEdit');
+    const tenantSelect = document.getElementById('rentTenantEdit');
     console.log('🔍 Looking for tenant with ID:', payment.tenantId);
     console.log('🔍 Available tenants in property:', paymentProperty.tenants);
     
@@ -5996,14 +6001,14 @@ function editMonthly(id) {
         tenantSelect.style.display = 'none';
         
         // Hide the "Select Tenant" label
-        const tenantLabel = document.querySelector('label[for="monthlyTenantEdit"]');
+        const tenantLabel = document.querySelector('label[for="rentTenantEdit"]');
         if (tenantLabel) {
             tenantLabel.style.display = 'none';
         }
         
         // Show tenant name in place of the dropdown
         const tenantDisplay = document.createElement('div');
-        tenantDisplay.id = 'monthlyTenantDisplay';
+        tenantDisplay.id = 'rentTenantDisplay';
         tenantDisplay.style.marginBottom = '15px';
         tenantDisplay.style.padding = '12px';
         tenantDisplay.style.backgroundColor = '#e8f4fd';
@@ -6028,14 +6033,14 @@ function editMonthly(id) {
     updateMonthlyFormButtons();
     
     // Change save button text
-    const saveBtn = document.querySelector('#monthlyEditForm button[type="submit"]');
+    const saveBtn = document.querySelector('#rentEditForm button[type="submit"]');
     saveBtn.textContent = 'Update Payment';
     
     // Change form heading
-    document.getElementById('monthlyFormTitle').textContent = 'Edit Monthly Payment';
+    document.getElementById('rentFormTitle').textContent = 'Edit Rent Payment';
     
     // Show cancel button
-    document.getElementById('monthlyCancelBtn').classList.remove('hidden');
+    document.getElementById('rentCancelBtn').classList.remove('hidden');
     
     showNotification('Edit payment details and save to update');
 }
@@ -6068,43 +6073,43 @@ function cancelMonthlyEdit() {
     
     console.log('🔍 About to reset form');
     // Reset form
-    const editForm = document.getElementById('monthlyEditForm');
+    const editForm = document.getElementById('rentEditForm');
     console.log('🔍 Edit form found:', !!editForm);
     if (editForm) {
         editForm.reset();
     }
     
     // 🔑 CRITICAL: Clean up tenant display and show dropdown again
-    const tenantDisplay = document.getElementById('monthlyTenantDisplay');
+    const tenantDisplay = document.getElementById('rentTenantDisplay');
     if (tenantDisplay) {
         tenantDisplay.remove();
     }
     
-    const tenantSelect = document.getElementById('monthlyTenantEdit');
+    const tenantSelect = document.getElementById('rentTenantEdit');
     tenantSelect.style.display = 'block';
     
-    // Show the "Select Tenant" label again
-    const tenantLabel = document.querySelector('label[for="monthlyTenantEdit"]');
+    // Show "Select Tenant" label again
+    const tenantLabel = document.querySelector('label[for="rentTenantEdit"]');
     if (tenantLabel) {
         tenantLabel.style.display = 'block';
     }
     
     // Reset form heading
-    document.getElementById('monthlyFormTitle').textContent = 'Record Monthly Payment';
+    document.getElementById('rentFormTitle').textContent = 'Record Rent Payment';
     
     // Reset save button text and state
-    const saveBtn = document.querySelector('#monthlyEditForm button[type="submit"]');
+    const saveBtn = document.querySelector('#rentEditForm button[type="submit"]');
     saveBtn.textContent = 'Record Payment';
     saveBtn.disabled = false;
     saveBtn.style.opacity = '1';
     saveBtn.style.cursor = 'pointer';
     
     // Hide cancel button
-    document.getElementById('monthlyCancelBtn').classList.add('hidden');
+    document.getElementById('rentCancelBtn').classList.add('hidden');
     
     // Hide overlay and restore background scroll
     console.log('🔍 About to close overlay');
-    const overlay = document.getElementById('monthlyEditOverlay');
+    const overlay = document.getElementById('rentEditOverlay');
     console.log('🔍 Overlay found:', !!overlay);
     if (overlay) {
         overlay.classList.add('hidden');
@@ -7171,6 +7176,7 @@ window.updateProperty = updateProperty;
 window.backToProperties = backToProperties;
 window.toggleTenantForm = toggleTenantForm;
 window.toggleMonthlyForm = toggleMonthlyForm;
+window.toggleRentForm = toggleRentForm;
 window.hideSplash = hideSplash;
 window.showTab = showTab;
 window.updatePropertyHeaders = updatePropertyHeaders;
@@ -7186,3 +7192,182 @@ window.applyUpdate = applyUpdate;
 window.addNewTenant = addNewTenant;
 window.showAddPropertyForm = showAddPropertyForm;
 window.hideAddPropertyForm = hideAddPropertyForm;
+
+// Shared Text Functionality
+let sharedTextData = null;
+
+// Parse URL parameters for shared text
+function handleSharedText() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const sharedText = urlParams.get('shared_text');
+    const sharedTitle = urlParams.get('shared_title');
+    
+    if (sharedText) {
+        sharedTextData = {
+            text: sharedText,
+            title: sharedTitle || 'Shared Text'
+        };
+        
+        // Show dialog after a short delay to ensure app is loaded
+        setTimeout(() => {
+            showSharedTextDialog();
+        }, 1000);
+    }
+}
+
+function showSharedTextDialog() {
+    if (!sharedTextData) return;
+    
+    const dialog = document.getElementById('sharedTextDialog');
+    const preview = document.getElementById('sharedTextPreview');
+    
+    if (dialog && preview) {
+        preview.textContent = sharedTextData.text;
+        dialog.style.display = 'flex';
+    }
+}
+
+function closeSharedTextDialog() {
+    const dialog = document.getElementById('sharedTextDialog');
+    if (dialog) {
+        dialog.style.display = 'none';
+    }
+    
+    // Clear shared text data and URL params
+    sharedTextData = null;
+    const url = new URL(window.location);
+    url.searchParams.delete('shared_text');
+    url.searchParams.delete('shared_title');
+    window.history.replaceState({}, document.title, url);
+}
+
+function parseSharedText(text) {
+    // Try to extract amount from the text
+    const amountRegex = /(?:Ksh|KES|₵|ksh|kes)?\s*[\d,]+(?:\.\d{2})?/gi;
+    const amountMatches = text.match(amountRegex);
+    
+    let amount = '';
+    if (amountMatches && amountMatches.length > 0) {
+        // Clean the amount (remove non-numeric characters except decimal point)
+        amount = amountMatches[0].replace(/[^\d.]/g, '');
+    }
+    
+    // Try to extract date
+    const dateRegex = /\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}|\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}/gi;
+    const dateMatches = text.match(dateRegex);
+    
+    let date = '';
+    if (dateMatches && dateMatches.length > 0) {
+        date = dateMatches[0];
+    }
+    
+    // Extract any remaining text as notes
+    let notes = text;
+    if (amount) {
+        notes = notes.replace(amountRegex, '');
+    }
+    if (date) {
+        notes = notes.replace(dateRegex, '');
+    }
+    notes = notes.trim();
+    
+    return {
+        amount: amount,
+        date: date,
+        notes: notes || 'From shared text'
+    };
+}
+
+function addSharedTextToRent() {
+    if (!sharedTextData) return;
+    
+    const parsed = parseSharedText(sharedTextData.text);
+    
+    // Switch to rent tab
+    showTab('monthly');
+    
+    // Open the rent form
+    setTimeout(() => {
+        toggleRentForm();
+        
+        // Fill the form with parsed data
+        setTimeout(() => {
+            if (parsed.amount) {
+                const amountField = document.getElementById('rentAmount');
+                if (amountField) {
+                    amountField.value = parsed.amount;
+                }
+            }
+            
+            if (parsed.date) {
+                const dateField = document.getElementById('rentDate');
+                if (dateField) {
+                    dateField.value = parsed.date;
+                }
+            }
+            
+            if (parsed.notes) {
+                const notesField = document.getElementById('rentNotes');
+                if (notesField) {
+                    notesField.value = parsed.notes;
+                }
+            }
+        }, 300);
+    }, 300);
+    
+    closeSharedTextDialog();
+    showNotification('Shared text added to Rent form');
+}
+
+function addSharedTextToExpenses() {
+    if (!sharedTextData) return;
+    
+    const parsed = parseSharedText(sharedTextData.text);
+    
+    // Switch to expenses tab
+    showTab('expenses');
+    
+    // Open the expense form
+    setTimeout(() => {
+        toggleExpenseForm();
+        
+        // Fill the form with parsed data
+        setTimeout(() => {
+            if (parsed.amount) {
+                const amountField = document.getElementById('expenseAmount');
+                if (amountField) {
+                    amountField.value = parsed.amount;
+                }
+            }
+            
+            if (parsed.date) {
+                const dateField = document.getElementById('expenseDate');
+                if (dateField) {
+                    dateField.value = parsed.date;
+                }
+            }
+            
+            if (parsed.notes) {
+                const descriptionField = document.getElementById('expenseDescription');
+                if (descriptionField) {
+                    descriptionField.value = parsed.notes;
+                }
+            }
+        }, 300);
+    }, 300);
+    
+    closeSharedTextDialog();
+    showNotification('Shared text added to Expenses form');
+}
+
+// Add alias for renamed function
+function toggleRentForm() {
+    toggleMonthlyForm();
+}
+
+// Export functions to global scope
+window.showSharedTextDialog = showSharedTextDialog;
+window.closeSharedTextDialog = closeSharedTextDialog;
+window.addSharedTextToRent = addSharedTextToRent;
+window.addSharedTextToExpenses = addSharedTextToExpenses;
+window.toggleRentForm = toggleRentForm;
