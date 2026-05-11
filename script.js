@@ -1647,8 +1647,8 @@ function exportPropertyFull() {
             ['', ''],
             ['Summary Metrics', ''],
             ['Total Tenants', property.tenants?.length || 0],
-            ['Occupied Units', property.tenants?.filter(t => t.depositPaid).length || 0],
-            ['Vacant Units', property.units - (property.tenants?.filter(t => t.depositPaid).length || 0)],
+            ['Occupied Units', property.tenants?.filter(t => !t.movedOut && !t.isArchived && !t.archived).length || 0],
+            ['Vacant Units', property.units - (property.tenants?.filter(t => !t.movedOut && !t.isArchived && !t.archived).length || 0)],
         ];
         
         const propertyWS = worksheetFromArrayOfArrays(propertyData);
@@ -1741,7 +1741,7 @@ function exportPropertyFull() {
         const totalExpenses = property.expenses?.reduce((sum, expense) => sum + (expense.amount || 0), 0) || 0;
         const netIncome = totalIncome - totalExpenses;
         const totalTenants = property.tenants?.length || 0;
-        const occupiedUnits = property.tenants?.filter(t => t.depositPaid).length || 0;
+        const occupiedUnits = property.tenants?.filter(t => !t.movedOut && !t.isArchived && !t.archived).length || 0;
         const vacantUnits = property.units - occupiedUnits;
         const avgRent = totalTenants > 0 ? (property.tenants.reduce((sum, t) => sum + t.rent, 0) / totalTenants).toFixed(0) : 0;
         
@@ -2134,7 +2134,7 @@ function renderProperties() {
     container.innerHTML = data.properties.map(property => {
         // Calculate occupancy
         const totalUnits = property.units || 1;
-        const occupiedUnits = property.tenants?.filter(t => !t.movedOut && !t.isArchived).length || 0;
+        const occupiedUnits = property.tenants?.filter(t => !t.movedOut && !t.isArchived && !t.archived).length || 0;
         const vacantUnits = totalUnits - occupiedUnits;
         const occupancyText = `${occupiedUnits}/${totalUnits} Occupied - ${vacantUnits} Vacant`;
         
@@ -3026,7 +3026,7 @@ function populateUnitDropdown() {
     
     const totalUnits = selectedProperty.units || 1;
     const propertyTenants = selectedProperty.tenants || [];
-    const occupiedUnits = new Set(propertyTenants.filter(t => !t.movedOut && !t.isArchived).map(t => t.unit));
+    const occupiedUnits = new Set(propertyTenants.filter(t => !t.movedOut && !t.isArchived && !t.archived).map(t => t.unit));
     
     // Generate unit options (1 to totalUnits)
     for (let i = 1; i <= totalUnits; i++) {
@@ -3486,7 +3486,7 @@ function addNewTenant() {
     
     // Check if property has reached its unit capacity
     const propertyTenants = (selectedProperty.tenants || []);
-    const occupiedUnits = propertyTenants.filter(t => !t.movedOut && !t.isArchived).length;
+    const occupiedUnits = propertyTenants.filter(t => !t.movedOut && !t.isArchived && !t.archived).length;
     const maxUnits = selectedProperty.units || 1;
     
     if (occupiedUnits >= maxUnits) {
@@ -4260,7 +4260,7 @@ function renderTenants() {
 
     // Sort tenants by numeric part of unit when possible, fallback to string
     // Filter out archived and moved out tenants
-    const activeTenants = propertyTenants.filter(tenant => !tenant.isArchived && !tenant.movedOut);
+    const activeTenants = propertyTenants.filter(tenant => !tenant.isArchived && !tenant.movedOut && !tenant.archived);
     
     const sortedTenants = activeTenants.slice().sort((a, b) => {
         const aNum = parseInt((a.unit || '').match(/\d+/)?.[0] || '0');
@@ -4308,13 +4308,18 @@ function renderTenants() {
     html += '</div>';
     
     // Archive section
-    const archivedTenants = propertyTenants.filter(tenant => tenant.isArchived || tenant.movedOut);
+    const archivedTenants = propertyTenants.filter(tenant => tenant.isArchived || tenant.movedOut || tenant.archived);
+    console.log('🔍 Archive tenants found:', archivedTenants.length);
+    
     if (archivedTenants.length > 0) {
+        console.log('✅ Adding archive section to HTML');
         const sortedArchived = archivedTenants.slice().sort((a, b) => {
             const dateA = new Date(a.tenantEnd || a.moveOutDate || '1970-01-01');
             const dateB = new Date(b.tenantEnd || b.moveOutDate || '1970-01-01');
             return dateB - dateA; // Most recent first
         });
+        
+        console.log('📅 Sorted archived tenants:', sortedArchived.map(t => t.name));
         
         html += '<div class="archive-section">';
         html += '<h3 class="section-title archive-title">📦 Past Tenants (Archive)</h3>';
@@ -4338,9 +4343,17 @@ function renderTenants() {
             </div>
         `).join('');
         html += '</div>';
+        
+        console.log('✅ Archive HTML added. Final HTML length:', html.length);
+        console.log('✅ Final HTML contains archive-section:', html.includes('archive-section'));
+    } else {
+        console.log('❌ No archived tenants found');
     }
     
+    console.log('🔍 Setting container.innerHTML...');
     container.innerHTML = html;
+    console.log('✅ Container.innerHTML set. Length:', container.innerHTML.length);
+    console.log('✅ Container contains archive-section:', container.innerHTML.includes('archive-section'));
 }
 
 function renderMonthly() {
@@ -4556,7 +4569,7 @@ function updateTenantSelects() {
     }
 
     // Filter out moved out and archived tenants for selects
-    const activeTenants = propertyTenants.filter(t => !t.movedOut && !t.isArchived);
+    const activeTenants = propertyTenants.filter(t => !t.movedOut && !t.isArchived && !t.archived);
 
     const tenantsList = activeTenants.slice().sort((a, b) => {
         const aNum = parseInt((a.unit || '').match(/\d+/)?.[0] || '0');
