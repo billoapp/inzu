@@ -1752,7 +1752,12 @@ function exportPropertyFull() {
             property.tenants.forEach(tenant => {
                 const monthlyPayments = property.monthly?.filter(p => p.tenantId == tenant.id) || [];
                 const totalPaid = monthlyPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
-                const balance = (tenant.rent * monthlyPayments.length) - totalPaid;
+                
+                // Calculate projected balance: (rent * months since tenant started) - total paid
+                const monthsSinceStart = tenant.tenantSince ? 
+                    Math.max(1, Math.floor((new Date() - new Date(tenant.tenantSince)) / (1000 * 60 * 60 * 24 * 30))) : 1;
+                const projectedRent = tenant.rent * monthsSinceStart;
+                const balance = projectedRent - totalPaid;
                 
                 // Format date properly
                 const formattedDate = tenant.tenantSince ? new Date(tenant.tenantSince).toLocaleDateString('en-GB') : '';
@@ -4941,7 +4946,12 @@ function exportCSV() {
             property.tenants.forEach(tenant => {
                 const monthlyPayments = property.monthly?.filter(p => p.tenantId == tenant.id) || [];
                 const totalPaid = monthlyPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
-                const balance = (tenant.rent * monthlyPayments.length) - totalPaid;
+                
+                // Calculate projected balance: (rent * months since tenant started) - total paid
+                const monthsSinceStart = tenant.tenantSince ? 
+                    Math.max(1, Math.floor((new Date() - new Date(tenant.tenantSince)) / (1000 * 60 * 60 * 24 * 30))) : 1;
+                const projectedRent = tenant.rent * monthsSinceStart;
+                const balance = projectedRent - totalPaid;
                 
                 // Format date properly
                 const formattedDate = tenant.tenantSince ? new Date(tenant.tenantSince).toLocaleDateString('en-GB') : '';
@@ -5098,7 +5108,12 @@ function generateFilteredCSV(properties, includeProperties, includeTenants, incl
                     
                     const monthlyPayments = property.monthly?.filter(p => p.tenantId == tenant.id) || [];
                     const totalPaid = monthlyPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
-                    const balance = (tenant.rent * monthlyPayments.length) - totalPaid;
+                    
+                    // Calculate projected balance: (rent * months since tenant started) - total paid
+                    const monthsSinceStart = tenant.tenantSince ? 
+                        Math.max(1, Math.floor((new Date() - new Date(tenant.tenantSince)) / (1000 * 60 * 60 * 24 * 30))) : 1;
+                    const projectedRent = tenant.rent * monthsSinceStart;
+                    const balance = projectedRent - totalPaid;
                     
                     // Format date properly
                     const formattedDate = tenant.tenantSince ? new Date(tenant.tenantSince).toLocaleDateString('en-GB') : '';
