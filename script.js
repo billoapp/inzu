@@ -4271,6 +4271,8 @@ function renderTenants() {
 
     let html = '';
     
+    console.log('🚀 Starting HTML generation for tenants...');
+    
     // Active tenants section
     html += '<div class="tenants-section">';
     html += '<h3 class="section-title">🏠 Active Tenants</h3>';
