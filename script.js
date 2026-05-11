@@ -2134,7 +2134,7 @@ function renderProperties() {
     container.innerHTML = data.properties.map(property => {
         // Calculate occupancy
         const totalUnits = property.units || 1;
-        const occupiedUnits = property.tenants?.filter(t => !t.movedOut).length || 0;
+        const occupiedUnits = property.tenants?.filter(t => !t.movedOut && !t.isArchived).length || 0;
         const vacantUnits = totalUnits - occupiedUnits;
         const occupancyText = `${occupiedUnits}/${totalUnits} Occupied - ${vacantUnits} Vacant`;
         
@@ -3026,7 +3026,7 @@ function populateUnitDropdown() {
     
     const totalUnits = selectedProperty.units || 1;
     const propertyTenants = selectedProperty.tenants || [];
-    const occupiedUnits = new Set(propertyTenants.filter(t => !t.movedOut).map(t => t.unit));
+    const occupiedUnits = new Set(propertyTenants.filter(t => !t.movedOut && !t.isArchived).map(t => t.unit));
     
     // Generate unit options (1 to totalUnits)
     for (let i = 1; i <= totalUnits; i++) {
@@ -3486,7 +3486,7 @@ function addNewTenant() {
     
     // Check if property has reached its unit capacity
     const propertyTenants = (selectedProperty.tenants || []);
-    const occupiedUnits = propertyTenants.filter(t => !t.movedOut).length;
+    const occupiedUnits = propertyTenants.filter(t => !t.movedOut && !t.isArchived).length;
     const maxUnits = selectedProperty.units || 1;
     
     if (occupiedUnits >= maxUnits) {
@@ -4259,8 +4259,8 @@ function renderTenants() {
     }
 
     // Sort tenants by numeric part of unit when possible, fallback to string
-    // Filter out archived tenants
-    const activeTenants = propertyTenants.filter(tenant => !tenant.archived);
+    // Filter out archived and moved out tenants
+    const activeTenants = propertyTenants.filter(tenant => !tenant.isArchived && !tenant.movedOut);
     
     const sortedTenants = activeTenants.slice().sort((a, b) => {
         const aNum = parseInt((a.unit || '').match(/\d+/)?.[0] || '0');
@@ -4269,7 +4269,12 @@ function renderTenants() {
         return String(a.unit || '').localeCompare(String(b.unit || ''));
     });
 
-    container.innerHTML = sortedTenants.map(tenant => `
+    let html = '';
+    
+    // Active tenants section
+    html += '<div class="tenants-section">';
+    html += '<h3 class="section-title">🏠 Active Tenants</h3>';
+    html += sortedTenants.map(tenant => `
         <div class="entry-card ${tenant.movedOut ? 'moved-out-tenant' : ''}">
             <div class="entry-header">
                 <div class="entry-title">${tenant.name}</div>
@@ -4300,6 +4305,42 @@ function renderTenants() {
             </div>
         </div>
     `).join('');
+    html += '</div>';
+    
+    // Archive section
+    const archivedTenants = propertyTenants.filter(tenant => tenant.isArchived || tenant.movedOut);
+    if (archivedTenants.length > 0) {
+        const sortedArchived = archivedTenants.slice().sort((a, b) => {
+            const dateA = new Date(a.tenantEnd || a.moveOutDate || '1970-01-01');
+            const dateB = new Date(b.tenantEnd || b.moveOutDate || '1970-01-01');
+            return dateB - dateA; // Most recent first
+        });
+        
+        html += '<div class="archive-section">';
+        html += '<h3 class="section-title archive-title">📦 Past Tenants (Archive)</h3>';
+        html += sortedArchived.map(tenant => `
+            <div class="entry-card archived-tenant">
+                <div class="entry-header">
+                    <div class="entry-title">${tenant.name}</div>
+                    <div class="entry-amount">Ksh ${tenant.rent}</div>
+                    <div class="archived-stamp">Archived</div>
+                </div>
+                <div class="entry-details">
+                    <div><span class="field-label">Unit:</span> ${tenant.unit}</div>
+                    <div><span class="field-label">Phone:</span> ${tenant.phone || 'Not provided'}</div>
+                    <div><span class="field-label">Email:</span> ${tenant.email || 'Not provided'}</div>
+                    <div><span class="field-label">Moved In:</span> ${tenant.since ? new Date(tenant.since).toLocaleDateString() : 'Not specified'}</div>
+                    <div><span class="field-label">Moved Out:</span> ${tenant.tenantEnd ? new Date(tenant.tenantEnd).toLocaleDateString() : (tenant.moveOutDate ? new Date(tenant.moveOutDate).toLocaleDateString() : 'Not specified')}</div>
+                    <div><span class="field-label">Deposit Returned:</span> Ksh ${tenant.depositReturned || 0}</div>
+                    ${tenant.finalBillAmount ? `<div><span class="field-label">Final Bill:</span> Ksh ${tenant.finalBillAmount}</div>` : ''}
+                    ${tenant.notes ? `<div class="tenant-notes">${tenant.notes}</div>` : ''}
+                </div>
+            </div>
+        `).join('');
+        html += '</div>';
+    }
+    
+    container.innerHTML = html;
 }
 
 function renderMonthly() {
@@ -4515,7 +4556,7 @@ function updateTenantSelects() {
     }
 
     // Filter out moved out and archived tenants for selects
-    const activeTenants = propertyTenants.filter(t => !t.movedOut && !t.archived);
+    const activeTenants = propertyTenants.filter(t => !t.movedOut && !t.isArchived);
 
     const tenantsList = activeTenants.slice().sort((a, b) => {
         const aNum = parseInt((a.unit || '').match(/\d+/)?.[0] || '0');
@@ -7061,6 +7102,8 @@ function confirmArchiveTenant() {
     tenant.finalElectricityReading = Number(finalElectricityReading) || null;
     tenant.finalWaterReading = Number(finalWaterReading) || null;
     tenant.isArchived = true;
+    tenant.movedOut = true;
+    tenant.moveOutDate = tenantEnd;
     
     // Save to Firebase
     saveToFirebaseOnly(data);

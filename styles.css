@@ -2731,3 +2731,39 @@ overflow: hidden;
         align-items: stretch;
     }
 }
+
+/* ===== TENANTS SECTIONS ===== */
+.tenants-section,
+.archive-section {
+    margin-bottom: 30px;
+}
+
+.section-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #2d3748;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.archive-title {
+    color: #718096;
+    border-bottom-color: #cbd5e0;
+}
+
+.archived-tenant {
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    opacity: 0.8;
+}
+
+.archived-stamp {
+    background: #718096;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
