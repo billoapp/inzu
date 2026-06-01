@@ -2734,7 +2734,8 @@ overflow: hidden;
 
 /* ===== TENANTS SECTIONS ===== */
 .tenants-section,
-.archive-section {
+.archive-section,
+.vacant-units-section {
     margin-bottom: 30px;
 }
 
@@ -2747,15 +2748,55 @@ overflow: hidden;
     border-bottom: 2px solid #e2e8f0;
 }
 
-.archive-title {
+.archive-title,
+.vacant-title {
     color: #718096;
     border-bottom-color: #cbd5e0;
+}
+
+.vacant-title {
+    color: #059669;
 }
 
 .archived-tenant {
     background: #f7fafc;
     border: 1px solid #e2e8f0;
     opacity: 0.8;
+}
+
+/* Vacant Units Grid */
+.vacant-units-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px;
+}
+
+.vacant-unit-card {
+    background: #e0e5ec;
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 4px 4px 10px #c2c8d0, -4px -4px 10px #ffffff;
+}
+
+.vacant-unit-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 6px 6px 15px #c2c8d0, -6px -6px 15px #ffffff;
+    background: #d1d9e6;
+}
+
+.vacant-unit-number {
+    font-size: 16px;
+    font-weight: 600;
+    color: #059669;
+    margin-bottom: 4px;
+}
+
+.vacant-unit-label {
+    font-size: 12px;
+    color: #64748b;
 }
 
 .archived-stamp {

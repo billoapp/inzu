@@ -1236,33 +1236,59 @@ function updatePropertyHeaders(property) {
 
 // ===== PROPERTY EXPORT FUNCTIONS =====
 function showPropertyExportDialog() {
-    const dialog = document.getElementById('propertyExportDialog');
-    const propertySelect = document.getElementById('exportPropertySelect');
-    const tenantSelect = document.getElementById('exportTenantSelect');
-    const exportTabs = document.getElementById('exportTabs');
-    
-    // Clear previous options
-    propertySelect.innerHTML = '<option value="">Choose a property...</option>';
-    tenantSelect.innerHTML = '<option value="">Choose a tenant...</option>';
-    
-    // Hide tabs initially
-    exportTabs.style.display = 'none';
-    
-    // Populate property select
-    data.properties.forEach(property => {
-        const option = document.createElement('option');
-        option.value = property.id;
-        option.textContent = property.name;
-        propertySelect.appendChild(option);
-    });
-    
-    // Pre-select current property if one is selected
-    if (data.selectedPropertyId) {
-        propertySelect.value = data.selectedPropertyId;
-        handlePropertySelection();
+    try {
+        const dialog = document.getElementById('propertyExportDialog');
+        if (!dialog) {
+            console.error('Export dialog element not found');
+            showNotification('Export dialog not available', 'error');
+            return;
+        }
+
+        const propertySelect = document.getElementById('exportPropertySelect');
+        const tenantSelect = document.getElementById('exportTenantSelect');
+        const exportTabs = document.getElementById('exportTabs');
+
+        if (!propertySelect || !tenantSelect) {
+            console.error('Export select elements missing');
+            showNotification('Export UI incomplete', 'error');
+            return;
+        }
+
+        // Clear previous options
+        propertySelect.innerHTML = '<option value="">Choose a property...</option>';
+        tenantSelect.innerHTML = '<option value="">Choose a tenant...</option>';
+        if (exportTabs) exportTabs.style.display = 'none';
+
+        // Guard against missing data
+        if (!data || !data.properties || data.properties.length === 0) {
+            propertySelect.innerHTML = '<option value="">No properties available</option>';
+            dialog.style.display = 'flex';
+            showNotification('No properties to export', 'info');
+            return;
+        }
+
+        // Populate property select
+        data.properties.forEach(property => {
+            const option = document.createElement('option');
+            option.value = property.id;
+            option.textContent = property.name;
+            propertySelect.appendChild(option);
+        });
+
+        // Pre-select current property if one is selected
+        if (data.selectedPropertyId) {
+            propertySelect.value = data.selectedPropertyId;
+            if (typeof handlePropertySelection === 'function') {
+                handlePropertySelection();
+            }
+        }
+
+        dialog.style.display = 'flex';
+        closeUserMenu(); // close the side panel
+    } catch (err) {
+        console.error('showPropertyExportDialog error:', err);
+        showNotification('Failed to open export dialog', 'error');
     }
-    
-    dialog.style.display = 'flex';
 }
 
 // Handle property selection and show tabs
@@ -1376,11 +1402,13 @@ function exportTenantStatement() {
             const monthsDiff = (endDate.getFullYear() - startDate.getFullYear()) * 12 + 
                            (endDate.getMonth() - startDate.getMonth());
             
-            expectedRent = tenant.rent * Math.max(0, monthsDiff);
+            const monthsCount = Math.max(0, monthsDiff);
+            const serviceChargeTotal = monthsCount * 300;
+            expectedRent = (tenant.rent * monthsCount) + serviceChargeTotal + (Number(tenant.depositPaid) || 0);
         }
         
-        const balance = expectedRent - totalPaid;
-        const status = tenant.depositPaid ? 'Active' : 'Pending';
+        const balance = totalPaid - expectedRent;
+        const status = balance < 0 ? 'Payment Required' : 'Balanced';
         
         // Helper function to extract payment reference from notes
         function extractPaymentReference(notes) {
@@ -1462,11 +1490,13 @@ function exportTenantStatement() {
             const monthsDiff = (endDate.getFullYear() - startDate.getFullYear()) * 12 + 
                            (endDate.getMonth() - startDate.getMonth());
             
-            expectedRent = tenant.rent * Math.max(0, monthsDiff);
+            const monthsCount = Math.max(0, monthsDiff);
+            const serviceChargeTotal = monthsCount * 300;
+            expectedRent = (tenant.rent * monthsCount) + serviceChargeTotal + (Number(tenant.depositPaid) || 0);
         }
         
-        const balance = expectedRent - totalPaid;
-        const status = tenant.depositPaid ? 'Active' : 'Pending';
+        const balance = totalPaid - expectedRent;
+        const status = balance < 0 ? 'Payment Required' : 'Balanced';
         
         // Helper function to extract payment reference from notes
         function extractPaymentReference(notes) {
@@ -1525,7 +1555,10 @@ function exportTenantStatementImage() {
     // Calculate tenant financials
     const monthlyPayments = property.monthly?.filter(p => p.tenantId == tenant.id) || [];
     const totalPaid = monthlyPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
-    const balance = (tenant.rent * monthlyPayments.length) - totalPaid;
+    const monthsCount = monthlyPayments.length;
+    const serviceChargeTotal = monthsCount * 300;
+    const expectedTotal = (tenant.rent * monthsCount) + serviceChargeTotal + (Number(tenant.depositPaid) || 0);
+    const balance = totalPaid - expectedTotal;
     
     // Create a temporary statement element for screenshot
     const statementDiv = document.createElement('div');
@@ -1559,9 +1592,10 @@ function exportTenantStatementImage() {
         <div style="margin: 20px 0;">
             <h4 style="margin: 0 0 10px 0; font-size: 14px;">Financial Summary</h4>
             <p style="margin: 5px 0; font-size: 14px;"><strong>Monthly Rent:</strong> Ksh ${tenant.rent}</p>
-            <p style="margin: 5px 0; font-size: 14px;"><strong>Total Paid:</strong> Ksh ${totalPaid}</p>
-            <p style="margin: 5px 0; font-size: 14px;"><strong>Balance:</strong> Ksh ${balance}</p>
-            <p style="margin: 5px 0; font-size: 14px;"><strong>Deposit:</strong> Ksh ${tenant.depositPaid || 0}</p>
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Garbage Service:</strong> Ksh 300</p>
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Initial Deposit:</strong> Ksh ${tenant.depositPaid || 0}</p>
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Total Paid (Receipts):</strong> Ksh ${totalPaid}</p>
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Statement Balance:</strong> Ksh ${balance} (${balance < 0 ? 'Due' : 'Credit'})</p>
         </div>
         
         <div style="margin: 20px 0;">
@@ -1647,8 +1681,8 @@ function exportPropertyFull() {
             ['', ''],
             ['Summary Metrics', ''],
             ['Total Tenants', property.tenants?.length || 0],
-            ['Occupied Units', property.tenants?.filter(t => !t.movedOut && !t.isArchived && !t.archived).length || 0],
-            ['Vacant Units', property.units - (property.tenants?.filter(t => !t.movedOut && !t.isArchived && !t.archived).length || 0)],
+            ['Occupied Units', property.tenants?.filter(t => !t.archived).length || 0],
+            ['Vacant Units', property.units - (property.tenants?.filter(t => !t.archived).length || 0)],
         ];
         
         const propertyWS = worksheetFromArrayOfArrays(propertyData);
@@ -1664,8 +1698,11 @@ function exportPropertyFull() {
             property.tenants.forEach(tenant => {
                 const monthlyPayments = property.monthly?.filter(p => p.tenantId == tenant.id) || [];
                 const totalPaid = monthlyPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
-                const balance = (tenant.rent * monthlyPayments.length) - totalPaid;
-                const status = tenant.depositPaid ? 'Active' : 'Pending';
+                const monthsCount = monthlyPayments.length;
+    const serviceChargeTotal = monthsCount * 300;
+    const expectedTotal = (tenant.rent * monthsCount) + serviceChargeTotal + (Number(tenant.depositPaid) || 0);
+    const balance = totalPaid - expectedTotal;
+                const status = balance < 0 ? 'Payment Required' : 'Balanced';
                 
                 // Format date properly
                 const formattedDate = tenant.tenantSince ? new Date(tenant.tenantSince).toLocaleDateString('en-GB') : '';
@@ -1741,7 +1778,7 @@ function exportPropertyFull() {
         const totalExpenses = property.expenses?.reduce((sum, expense) => sum + (expense.amount || 0), 0) || 0;
         const netIncome = totalIncome - totalExpenses;
         const totalTenants = property.tenants?.length || 0;
-        const occupiedUnits = property.tenants?.filter(t => !t.movedOut && !t.isArchived && !t.archived).length || 0;
+        const occupiedUnits = property.tenants?.filter(t => !t.archived).length || 0;
         const vacantUnits = property.units - occupiedUnits;
         const avgRent = totalTenants > 0 ? (property.tenants.reduce((sum, t) => sum + t.rent, 0) / totalTenants).toFixed(0) : 0;
         
@@ -1792,8 +1829,9 @@ function exportPropertyFull() {
                 // Calculate projected balance: (rent * months since tenant started) - total paid
                 const monthsSinceStart = tenant.tenantSince ? 
                     Math.max(1, Math.floor((new Date() - new Date(tenant.tenantSince)) / (1000 * 60 * 60 * 24 * 30))) : 1;
-                const projectedRent = tenant.rent * monthsSinceStart;
-                const balance = projectedRent - totalPaid;
+                const serviceChargeTotal = monthsSinceStart * 300;
+                const expectedTotal = (tenant.rent * monthsSinceStart) + serviceChargeTotal + (Number(tenant.depositPaid) || 0);
+                const balance = totalPaid - expectedTotal;
                 
                 // Format date properly
                 const formattedDate = tenant.tenantSince ? new Date(tenant.tenantSince).toLocaleDateString('en-GB') : '';
@@ -2134,9 +2172,11 @@ function renderProperties() {
     container.innerHTML = data.properties.map(property => {
         // Calculate occupancy
         const totalUnits = property.units || 1;
-        const occupiedUnits = property.tenants?.filter(t => !t.movedOut && !t.isArchived && !t.archived).length || 0;
+        const occupiedUnits = property.tenants?.filter(t => !t.archived).length || 0;
         const vacantUnits = totalUnits - occupiedUnits;
         const occupancyText = `${occupiedUnits}/${totalUnits} Occupied - ${vacantUnits} Vacant`;
+        
+        console.log(`🏠 ${property.name} - Occupancy: ${occupancyText} (Total: ${totalUnits}, Active: ${occupiedUnits}, Archived: ${property.tenants?.filter(t => t.archived).length || 0})`);
         
         return `
         <div class="property-card ${currentSelectedId === property.id ? 'selected' : ''}" onclick="selectProperty('${property.id}')">
@@ -3026,7 +3066,7 @@ function populateUnitDropdown() {
     
     const totalUnits = selectedProperty.units || 1;
     const propertyTenants = selectedProperty.tenants || [];
-    const occupiedUnits = new Set(propertyTenants.filter(t => !t.movedOut && !t.isArchived && !t.archived).map(t => t.unit));
+    const occupiedUnits = new Set(propertyTenants.filter(t => !t.archived).map(t => String(t.unit)));
     
     // Generate unit options (1 to totalUnits)
     for (let i = 1; i <= totalUnits; i++) {
@@ -3034,7 +3074,7 @@ function populateUnitDropdown() {
         const option = document.createElement('option');
         option.value = unitNumber;
         
-        if (occupiedUnits.has(unitNumber)) {
+        if (occupiedUnits.has(String(i))) {
             option.textContent = `Unit ${unitNumber} (Occupied)`;
             option.disabled = true;
             option.style.color = '#9ca3af';
@@ -3486,7 +3526,7 @@ function addNewTenant() {
     
     // Check if property has reached its unit capacity
     const propertyTenants = (selectedProperty.tenants || []);
-    const occupiedUnits = propertyTenants.filter(t => !t.movedOut && !t.isArchived && !t.archived).length;
+    const occupiedUnits = propertyTenants.filter(t => !t.archived).length;
     const maxUnits = selectedProperty.units || 1;
     
     if (occupiedUnits >= maxUnits) {
@@ -3517,10 +3557,10 @@ function addNewTenant() {
         // Archive fields
         tenantEnd: null,
         finalBillAmount: null,
-        depositReturned: null,
+        depositAdjustment: null,
         finalElectricityReading: null,
         finalWaterReading: null,
-        isArchived: false,
+        archived: false,
         createdAt: new Date().toISOString()
     };
 
@@ -3631,7 +3671,7 @@ function addTenant() {
     // Check if unit is already occupied (in the selected property)
     const existingTenant = selectedProperty.tenants.find(t => 
         t.unit.toLowerCase() === unit.toLowerCase() && 
-        !t.movedOut && 
+        !t.archived && 
         t.id !== window.editingTenantId
     );
     if (existingTenant) {
@@ -4079,7 +4119,7 @@ function addMoveOut() {
         id: window.editingMoveOutId || Date.now(),
         tenantId: document.getElementById('moveoutTenant' + formPrefix).value,
         date: document.getElementById('moveoutDate' + formPrefix).value,
-        depositReturned: document.getElementById('depositReturned' + formPrefix).value,
+        depositAdjustment: document.getElementById('archiveDepositReturned').value,
         notes: document.getElementById('moveoutNotes' + formPrefix).value,
         createdAt: new Date().toISOString()
     };
@@ -4103,13 +4143,13 @@ function addMoveOut() {
         const tenant = selectedProperty.tenants ? selectedProperty.tenants.find(t => t.id === moveOut.tenantId) : null;
         if (tenant) {
             console.log('Moving out tenant:', tenant.name, 'from unit:', tenant.unit);
-            tenant.movedOut = true;
-            tenant.moveOutDate = moveOut.date;
-            tenant.depositReturned = moveOut.depositReturned;
+            tenant.archived = true;
+            tenant.tenantEnd = moveOut.date;
+            tenant.depositAdjustment = moveOut.depositAdjustment;
             tenant.moveOutNotes = moveOut.notes;
             // IMPORTANT: Preserve the unit field for historical records
-            // The unit will be available for new tenants because duplicate checking excludes movedOut tenants
-            console.log('Tenant moved out, unit preserved:', tenant.unit);
+            // The unit will be available for new tenants because duplicate checking excludes archived tenants
+            console.log('Tenant archived, unit preserved:', tenant.unit);
         }
         
         showNotification('Move out recorded successfully!');
@@ -4245,9 +4285,23 @@ function renderTenants() {
     console.log('🔍 selectedProperty.tenants:', selectedProperty.tenants);
     const propertyTenants = selectedProperty.tenants || [];
     console.log('🔍 propertyTenants count:', propertyTenants.length);
-    
-    if (!propertyTenants || propertyTenants.length === 0) {
-        console.log('🔍 No tenants - showing empty state');
+
+    // Filter active (non-archived) tenants
+    const activeTenants = propertyTenants.filter(tenant => !tenant.archived);
+
+    // Vacant units — normalise unit values to strings to avoid number/string mismatch
+    const totalUnits = selectedProperty.units || 0;
+    const occupiedUnitNumbers = new Set(activeTenants.map(t => String(t.unit)));
+    const vacantUnitNumbers = [];
+    for (let i = 1; i <= totalUnits; i++) {
+        if (!occupiedUnitNumbers.has(String(i))) {
+            vacantUnitNumbers.push(i.toString());
+        }
+    }
+    console.log('🔍 Vacant units:', vacantUnitNumbers);
+
+    // Only show the pure empty state when there are NO tenants at all AND no units defined
+    if (propertyTenants.length === 0 && totalUnits === 0) {
         container.innerHTML = `
             <div class="empty-state">
                 <div class="empty-state-icon">👥</div>
@@ -4258,10 +4312,9 @@ function renderTenants() {
         return;
     }
 
-    // Sort tenants by numeric part of unit when possible, fallback to string
-    // Filter out archived and moved out tenants
-    const activeTenants = propertyTenants.filter(tenant => !tenant.isArchived && !tenant.movedOut && !tenant.archived);
+    console.log('🔍 About to build tenants UI...');
     
+    // Sort active tenants by numeric unit number
     const sortedTenants = activeTenants.slice().sort((a, b) => {
         const aNum = parseInt((a.unit || '').match(/\d+/)?.[0] || '0');
         const bNum = parseInt((b.unit || '').match(/\d+/)?.[0] || '0');
@@ -4270,25 +4323,45 @@ function renderTenants() {
     });
 
     let html = '';
-    
+
     console.log('🚀 Starting HTML generation for tenants...');
+    
+    if (vacantUnitNumbers.length > 0) {
+        html += '<div class="vacant-units-section">';
+        html += '<h3 class="section-title vacant-title">🏢 Vacant Units</h3>';
+        html += '<div class="vacant-units-grid">';
+        html += vacantUnitNumbers.map(unitNum => `
+            <div class="vacant-unit-card" onclick="selectVacantUnit('${unitNum}')">
+                <div class="vacant-unit-number">Unit ${unitNum}</div>
+                <div class="vacant-unit-label">Available</div>
+            </div>
+        `).join('');
+        html += '</div></div>';
+    }
     
     // Active tenants section
     html += '<div class="tenants-section">';
     html += '<h3 class="section-title">🏠 Active Tenants</h3>';
+    if (sortedTenants.length === 0) {
+        html += `<div class="empty-state" style="padding: 24px 0;">
+            <div class="empty-state-icon">🏠</div>
+            <div class="empty-state-text">No active tenants</div>
+            <div class="empty-state-subtext">All units are currently vacant — tap a vacant unit above to add a tenant</div>
+        </div>`;
+    }
     html += sortedTenants.map(tenant => `
-        <div class="entry-card ${tenant.movedOut ? 'moved-out-tenant' : ''}">
+        <div class="entry-card">
             <div class="entry-header">
                 <div class="entry-title">${tenant.name}</div>
                 <div class="entry-amount">Ksh ${tenant.rent}</div>
-                ${tenant.movedOut ? `<div class="moved-out-stamp">Moved Out ${tenant.moveOutDate ? new Date(tenant.moveOutDate).toLocaleDateString() : ''}</div>` : ''}
             </div>
             <div class="entry-details">
                 <div><span class="field-label">Unit:</span> ${tenant.unit}</div>
                 <div><span class="field-label">Phone:</span> ${tenant.phone || 'Not provided'}</div>
                 <div><span class="field-label">Email:</span> ${tenant.email || 'Not provided'}</div>
                 <div><span class="field-label">Tenant Since:</span> ${tenant.since ? new Date(tenant.since).toLocaleDateString() : 'Not specified'}</div>
-                <div><span class="field-label">Deposit:</span> Ksh ${tenant.depositPaid || 0}</div>
+                <div><span class="field-label">Initial Deposit:</span> Ksh ${tenant.depositPaid || 0}</div>
+                <div><span class="field-label">Garbage Service:</span> Ksh 300/mo</div>
                 <div><span class="field-label">Electricity:</span> ${tenant.electricityMeter || '—'} (Balance: Ksh ${tenant.electricityBalance || 0})</div>
                 <div><span class="field-label">Water:</span> ${tenant.waterMeter || '—'} (Balance: Ksh ${tenant.waterBalance || 0})</div>
                 ${tenant.notes ? `<div class="tenant-notes">${tenant.notes}</div>` : ''}
@@ -4310,14 +4383,14 @@ function renderTenants() {
     html += '</div>';
     
     // Archive section
-    const archivedTenants = propertyTenants.filter(tenant => tenant.isArchived || tenant.movedOut || tenant.archived);
+    const archivedTenants = propertyTenants.filter(tenant => tenant.archived);
     console.log('🔍 Archive tenants found:', archivedTenants.length);
     
     if (archivedTenants.length > 0) {
         console.log('✅ Adding archive section to HTML');
         const sortedArchived = archivedTenants.slice().sort((a, b) => {
-            const dateA = new Date(a.tenantEnd || a.moveOutDate || '1970-01-01');
-            const dateB = new Date(b.tenantEnd || b.moveOutDate || '1970-01-01');
+            const dateA = new Date(a.tenantEnd || '1970-01-01');
+            const dateB = new Date(b.tenantEnd || '1970-01-01');
             return dateB - dateA; // Most recent first
         });
         
@@ -4338,7 +4411,7 @@ function renderTenants() {
                     <div><span class="field-label">Email:</span> ${tenant.email || 'Not provided'}</div>
                     <div><span class="field-label">Moved In:</span> ${tenant.since ? new Date(tenant.since).toLocaleDateString() : 'Not specified'}</div>
                     <div><span class="field-label">Moved Out:</span> ${tenant.tenantEnd ? new Date(tenant.tenantEnd).toLocaleDateString() : (tenant.moveOutDate ? new Date(tenant.moveOutDate).toLocaleDateString() : 'Not specified')}</div>
-                    <div><span class="field-label">Deposit Returned:</span> Ksh ${tenant.depositReturned || 0}</div>
+                    <div><span class="field-label">Deposit Adjustment:</span> Ksh ${tenant.depositAdjustment || 0}</div>
                     ${tenant.finalBillAmount ? `<div><span class="field-label">Final Bill:</span> Ksh ${tenant.finalBillAmount}</div>` : ''}
                     ${tenant.notes ? `<div class="tenant-notes">${tenant.notes}</div>` : ''}
                 </div>
@@ -4540,7 +4613,7 @@ function renderMoveOuts() {
             <div class="entry-card">
                 <div class="entry-header">
                     <div class="entry-title">${tenant ? tenant.name : 'Unknown Tenant'}</div>
-                    <div class="entry-amount">Ksh ${moveOut.depositReturned || 0}</div>
+                    <div class="entry-amount">Ksh ${moveOut.depositAdjustment || 0}</div>
                 </div>
                 <div class="entry-details">
                     <div><span class="field-label">Unit:</span> ${tenant ? tenant.unit : 'Unknown'}</div>
@@ -4571,7 +4644,7 @@ function updateTenantSelects() {
     }
 
     // Filter out moved out and archived tenants for selects
-    const activeTenants = propertyTenants.filter(t => !t.movedOut && !t.isArchived && !t.archived);
+    const activeTenants = propertyTenants.filter(t => !t.archived);
 
     const tenantsList = activeTenants.slice().sort((a, b) => {
         const aNum = parseInt((a.unit || '').match(/\d+/)?.[0] || '0');
@@ -4593,6 +4666,29 @@ function updateTenantSelects() {
 function archiveTenant(id) {
     // Show the new archive modal instead of simple confirm
     showArchiveModal(id);
+}
+
+// ===== VACANT UNIT FUNCTIONS =====
+function selectVacantUnit(unitNumber) {
+    // Expand the add tenant form
+    const formCollapsible = document.getElementById('tenantFormCollapsible');
+    if (formCollapsible && formCollapsible.classList.contains('collapsed')) {
+        toggleTenantForm();
+    }
+    
+    // Set the unit dropdown value
+    setTimeout(() => {
+        const unitSelect = document.getElementById('newTenantUnit');
+        if (unitSelect) {
+            unitSelect.value = unitNumber;
+        }
+    }, 100);
+    
+    // Focus on tenant name field
+    const nameInput = document.getElementById('newTenantName');
+    if (nameInput) {
+        nameInput.focus();
+    }
 }
 
 // ===== DELETE FUNCTIONS =====
@@ -5044,8 +5140,9 @@ function exportCSV() {
                 // Calculate projected balance: (rent * months since tenant started) - total paid
                 const monthsSinceStart = tenant.tenantSince ? 
                     Math.max(1, Math.floor((new Date() - new Date(tenant.tenantSince)) / (1000 * 60 * 60 * 24 * 30))) : 1;
-                const projectedRent = tenant.rent * monthsSinceStart;
-                const balance = projectedRent - totalPaid;
+                const serviceChargeTotal = monthsSinceStart * 300;
+                const expectedTotal = (tenant.rent * monthsSinceStart) + serviceChargeTotal + (Number(tenant.depositPaid) || 0);
+                const balance = totalPaid - expectedTotal;
                 
                 // Format date properly
                 const formattedDate = tenant.tenantSince ? new Date(tenant.tenantSince).toLocaleDateString('en-GB') : '';
@@ -5325,8 +5422,11 @@ function generateFilteredExcel(properties, includeProperties, includeTenants, in
                     
                     const monthlyPayments = property.monthly?.filter(p => p.tenantId == tenant.id) || [];
                     const totalPaid = monthlyPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
-                    const balance = (tenant.rent * monthlyPayments.length) - totalPaid;
-                    const status = tenant.depositPaid ? 'Active' : 'Pending';
+                    const monthsCount = monthlyPayments.length;
+    const serviceChargeTotal = monthsCount * 300;
+    const expectedTotal = (tenant.rent * monthsCount) + serviceChargeTotal + (Number(tenant.depositPaid) || 0);
+    const balance = totalPaid - expectedTotal;
+                    const status = balance < 0 ? 'Payment Required' : 'Balanced';
                     
                     // Format date properly
                     const formattedDate = tenant.tenantSince ? new Date(tenant.tenantSince).toLocaleDateString('en-GB') : '';
@@ -6351,7 +6451,7 @@ function editMoveOut(id) {
     window.originalMoveOutData = {
         tenantId: moveOut.tenantId,
         date: moveOut.date,
-        depositReturned: moveOut.depositReturned || '',
+        depositAdjustment: moveOut.depositAdjustment || '',
         notes: moveOut.notes || ''
     };
     
@@ -6362,7 +6462,7 @@ function editMoveOut(id) {
     // Fill form with move out data
     document.getElementById('moveoutTenantEdit').value = moveOut.tenantId;
     document.getElementById('moveoutDateEdit').value = moveOut.date;
-    document.getElementById('depositReturnedEdit').value = moveOut.depositReturned || '';
+    document.getElementById('depositReturnedEdit').value = moveOut.depositAdjustment || '';
     document.getElementById('moveoutNotesEdit').value = moveOut.notes || '';
     
     // Reset edit state and capture baseline
@@ -7097,7 +7197,7 @@ function closeArchiveModal() {
 function confirmArchiveTenant() {
     const tenantEnd = document.getElementById('archiveTenantEnd').value;
     const finalBillAmount = document.getElementById('archiveFinalBillAmount').value;
-    const depositReturned = document.getElementById('archiveDepositReturned').value;
+    const depositAdjustment = document.getElementById('archiveDepositReturned').value;
     const finalElectricityReading = document.getElementById('archiveFinalElectricityReading').value;
     const finalWaterReading = document.getElementById('archiveFinalWaterReading').value;
     
@@ -7113,21 +7213,22 @@ function confirmArchiveTenant() {
     // Update tenant with archive data
     tenant.tenantEnd = tenantEnd;
     tenant.finalBillAmount = Number(finalBillAmount) || null;
-    tenant.depositReturned = Number(depositReturned) || null;
+    tenant.depositAdjustment = Number(depositReturned) || null;
     tenant.finalElectricityReading = Number(finalElectricityReading) || null;
     tenant.finalWaterReading = Number(finalWaterReading) || null;
-    tenant.isArchived = true;
-    tenant.movedOut = true;
-    tenant.moveOutDate = tenantEnd;
+    tenant.archived = true;
+    tenant.tenantEnd = tenantEnd;
     
-    // Save to Firebase
-    saveToFirebaseOnly(data);
+    // Save fully (localStorage + Firebase) so occupancy updates everywhere
+    saveData();
     
     // Close modal
     closeArchiveModal();
     
-    // Refresh tenant list
+    // Refresh tenant list, property cards, and unit dropdown
     renderTenants();
+    renderProperties();
+    updateTenantSelects();
     
     showNotification('Tenant archived successfully!', 'success');
 }
@@ -7161,18 +7262,9 @@ function captureSummaryScreenshot() {
     if (typeof html2canvas !== 'undefined') {
         html2canvas(summaryElement, {
             backgroundColor: '#ffffff',
-            scale: 1,
-            logging: false,
+            scale: 2,
             useCORS: true,
-            allowTaint: true,
-            // Capture only the visible content
-            x: 0,
-            y: 0,
-            width: summaryElement.scrollWidth,
-            height: summaryElement.scrollHeight,
-            // Remove any scrollbars
-            scrollX: 0,
-            scrollY: 0
+            allowTaint: true
         }).then(canvas => {
             // Convert canvas to blob and download
             canvas.toBlob(function(blob) {

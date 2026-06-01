@@ -8,7 +8,18 @@
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "**/*.bat",
+      "**/*.sh",
+      "**/*.exe",
+      "check-*.js",
+      "debug-*.js",
+      "fixed-*.js",
+      "test-*.js",
+      "quick-*.js",
+      "safe-*.js",
+      "simple-*.js",
+      "*.backup"
     ],
     "headers": [
       {
