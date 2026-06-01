@@ -1,3 +1,4 @@
+
 // Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyC2ed7p5iIOcRNvOErrPcdSoJYrXH4vZIc",
@@ -1533,6 +1534,7 @@ function exportTenantStatement() {
     }
 }
 
+// NEW: exportTenantStatementImage - opens HTML view with print, save as image, share
 function exportTenantStatementImage() {
     const propertyId = document.getElementById('exportPropertySelect').value;
     const tenantId = document.getElementById('exportTenantSelect').value;
@@ -1560,98 +1562,305 @@ function exportTenantStatementImage() {
     const expectedTotal = (tenant.rent * monthsCount) + serviceChargeTotal + (Number(tenant.depositPaid) || 0);
     const balance = totalPaid - expectedTotal;
     
-    // Create a temporary statement element for screenshot
-    const statementDiv = document.createElement('div');
-    statementDiv.style.cssText = `
-        position: fixed;
-        top: -9999px;
-        left: -9999px;
-        width: 400px;
-        padding: 20px;
-        background: white;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        font-family: Arial, sans-serif;
-        color: #333;
-        z-index: 9999;
-    `;
+    // Helper to escape HTML
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        }).replace(/[\uD800-\uDFFF]/g, function(c) {
+            return c;
+        });
+    }
     
-    // Build statement content
-    let statementHTML = `
-        <h2 style="margin: 0 0 15px 0; color: #2563eb; font-size: 18px;">Tenant Statement</h2>
-        <p style="margin: 5px 0; font-size: 12px; color: #666;">${property.name}</p>
-        <p style="margin: 5px 0; font-size: 12px; color: #666;">${property.address}</p>
-        
-        <div style="margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 5px;">
-            <h3 style="margin: 0 0 10px 0; font-size: 16px;">${tenant.name}</h3>
-            <p style="margin: 5px 0; font-size: 14px;"><strong>Unit:</strong> ${tenant.unit}</p>
-            <p style="margin: 5px 0; font-size: 14px;"><strong>Phone:</strong> ${tenant.phone || 'N/A'}</p>
-            <p style="margin: 5px 0; font-size: 14px;"><strong>Email:</strong> ${tenant.email || 'N/A'}</p>
+    // Build HTML content for the statement
+    const statementHTML = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Tenant Statement - ${escapeHtml(tenant.name)}</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f1f5f9;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .statement-container {
+            max-width: 800px;
+            width: 100%;
+            background: white;
+            border-radius: 24px;
+            box-shadow: 0 20px 35px -10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .statement-header {
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            color: white;
+            padding: 24px;
+            text-align: center;
+        }
+        .statement-header h1 {
+            font-size: 1.8rem;
+            margin-bottom: 8px;
+        }
+        .statement-header p {
+            opacity: 0.9;
+            font-size: 0.9rem;
+        }
+        .statement-body {
+            padding: 24px;
+        }
+        .tenant-info {
+            background: #f8fafc;
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 24px;
+            border: 1px solid #e2e8f0;
+        }
+        .tenant-info h2 {
+            font-size: 1.4rem;
+            margin-bottom: 12px;
+            color: #0f172a;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+        }
+        .info-item {
+            font-size: 0.9rem;
+        }
+        .info-label {
+            font-weight: 600;
+            color: #334155;
+        }
+        .financial-summary {
+            background: #f1f5f9;
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        .financial-summary h3 {
+            margin-bottom: 16px;
+            color: #0f172a;
+        }
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #cbd5e1;
+        }
+        .summary-row.total {
+            border-bottom: none;
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin-top: 8px;
+            padding-top: 12px;
+            border-top: 2px solid #94a3b8;
+        }
+        .payments-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+        }
+        .payments-table th,
+        .payments-table td {
+            text-align: left;
+            padding: 10px 8px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .payments-table th {
+            background: #e2e8f0;
+            font-weight: 600;
+        }
+        .footer {
+            text-align: center;
+            font-size: 0.75rem;
+            color: #64748b;
+            padding: 16px;
+            border-top: 1px solid #e2e8f0;
+            margin-top: 16px;
+        }
+        .toolbar {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            padding: 16px 24px;
+            background: white;
+            border-top: 1px solid #e2e8f0;
+            flex-wrap: wrap;
+        }
+        button {
+            background: #2563eb;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 40px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: 0.2s;
+        }
+        button:hover {
+            background: #1d4ed8;
+            transform: scale(1.02);
+        }
+        button.print-btn { background: #334155; }
+        button.print-btn:hover { background: #1e293b; }
+        button.share-btn { background: #16a34a; }
+        button.share-btn:hover { background: #15803d; }
+        @media print {
+            .toolbar {
+                display: none;
+            }
+            body {
+                background: white;
+                padding: 0;
+            }
+            .statement-container {
+                box-shadow: none;
+                border-radius: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="statement-container" id="statementContainer">
+    <div class="statement-header">
+        <h1>🏢 TENANT STATEMENT</h1>
+        <p>${escapeHtml(property.name)} | ${escapeHtml(property.address)}</p>
+    </div>
+    <div class="statement-body">
+        <div class="tenant-info">
+            <h2>👤 ${escapeHtml(tenant.name)}</h2>
+            <div class="info-grid">
+                <div class="info-item"><span class="info-label">Unit:</span> ${escapeHtml(tenant.unit)}</div>
+                <div class="info-item"><span class="info-label">Phone:</span> ${escapeHtml(tenant.phone || 'N/A')}</div>
+                <div class="info-item"><span class="info-label">Email:</span> ${escapeHtml(tenant.email || 'N/A')}</div>
+                <div class="info-item"><span class="info-label">Tenant Since:</span> ${tenant.tenantSince ? new Date(tenant.tenantSince).toLocaleDateString() : 'N/A'}</div>
+            </div>
         </div>
-        
-        <div style="margin: 20px 0;">
-            <h4 style="margin: 0 0 10px 0; font-size: 14px;">Financial Summary</h4>
-            <p style="margin: 5px 0; font-size: 14px;"><strong>Monthly Rent:</strong> Ksh ${tenant.rent}</p>
-            <p style="margin: 5px 0; font-size: 14px;"><strong>Garbage Service:</strong> Ksh 300</p>
-            <p style="margin: 5px 0; font-size: 14px;"><strong>Initial Deposit:</strong> Ksh ${tenant.depositPaid || 0}</p>
-            <p style="margin: 5px 0; font-size: 14px;"><strong>Total Paid (Receipts):</strong> Ksh ${totalPaid}</p>
-            <p style="margin: 5px 0; font-size: 14px;"><strong>Statement Balance:</strong> Ksh ${balance} (${balance < 0 ? 'Due' : 'Credit'})</p>
+        <div class="financial-summary">
+            <h3>💰 Financial Summary</h3>
+            <div class="summary-row"><span>Monthly Rent:</span><span>Ksh ${tenant.rent.toLocaleString()}</span></div>
+            <div class="summary-row"><span>Garbage Service (monthly):</span><span>Ksh 300</span></div>
+            <div class="summary-row"><span>Initial Deposit Paid:</span><span>Ksh ${(tenant.depositPaid || 0).toLocaleString()}</span></div>
+            <div class="summary-row"><span>Total Payments Received:</span><span>Ksh ${totalPaid.toLocaleString()}</span></div>
+            <div class="summary-row total"><span>Current Balance:</span><span>Ksh ${balance.toLocaleString()} (${balance < 0 ? 'Due' : 'Credit'})</span></div>
         </div>
-        
-        <div style="margin: 20px 0;">
-            <h4 style="margin: 0 0 10px 0; font-size: 14px;">Recent Payments</h4>
-    `;
-    
-    // Add recent payments (last 5)
-    const recentPayments = monthlyPayments.slice(-5).reverse();
-    recentPayments.forEach(payment => {
-        statementHTML += `
-            <p style="margin: 5px 0; font-size: 12px;">
-                ${new Date(payment.date).toLocaleDateString()}: Ksh ${payment.amount}
-                ${payment.notes ? '<br><span style="color: #666; font-size: 11px;">' + payment.notes.substring(0, 50) + '...</span>' : ''}
-            </p>
-        `;
-    });
-    
-    statementHTML += `
+        <h3>📅 Payment History</h3>
+        <table class="payments-table">
+            <thead>
+                <tr><th>Date</th><th>Amount (Ksh)</th><th>Reference</th><th>Notes</th></tr>
+            </thead>
+            <tbody>
+                ${monthlyPayments.slice().reverse().map(p => {
+                    const refMatch = p.notes?.match(/^CAP\d+/);
+                    const ref = refMatch ? refMatch[0] : '';
+                    const notes = p.notes ? p.notes.replace(/^CAP\d+\s*/, '') : '';
+                    return `<tr>
+                        <td>${new Date(p.date).toLocaleDateString()}</td>
+                        <td>${p.amount.toLocaleString()}</td>
+                        <td>${escapeHtml(ref)}</td>
+                        <td>${escapeHtml(notes.substring(0, 60))}</td>
+                    </tr>`;
+                }).join('')}
+                ${monthlyPayments.length === 0 ? '<tr><td colspan="4" style="text-align:center">No payments recorded</td></tr>' : ''}
+            </tbody>
+        </table>
+        <div class="footer">
+            Generated on ${new Date().toLocaleString()} via Inzu App
         </div>
-        
-        <div style="margin: 20px 0; padding-top: 15px; border-top: 1px solid #ddd; font-size: 11px; color: #666; text-align: center;">
-            Generated on ${new Date().toLocaleDateString()}
-        </div>
-    `;
-    
-    statementDiv.innerHTML = statementHTML;
-    document.body.appendChild(statementDiv);
-    
-    // Use html2canvas for screenshot if available
-    if (typeof html2canvas !== 'undefined') {
-        html2canvas(statementDiv, {
+    </div>
+    <div class="toolbar">
+        <button class="print-btn" onclick="window.print()">🖨️ Print</button>
+        <button id="saveImageBtn">💾 Save as Image</button>
+        <button id="shareBtn">📤 Share</button>
+    </div>
+</div>
+<script>
+    document.getElementById('saveImageBtn').addEventListener('click', function() {
+        const element = document.getElementById('statementContainer');
+        html2canvas(element, {
+            scale: 2,
             backgroundColor: '#ffffff',
-            scale: 2
+            logging: false
         }).then(canvas => {
             canvas.toBlob(function(blob) {
                 const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `${tenant.name}-statement-${new Date().toISOString().split('T')[0]}.png`;
-                link.click();
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'Tenant_Statement_${tenant.name.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().slice(0,10)}.png';
+                a.click();
                 URL.revokeObjectURL(url);
-                
-                // Clean up
-                document.body.removeChild(statementDiv);
-                closePropertyExportDialog();
-                showNotification('Image statement (.png) exported successfully for ' + tenant.name + '!');
+                alert('Image saved!');
             }, 'image/png');
-        }).catch(error => {
-            console.error('Screenshot error:', error);
-            document.body.removeChild(statementDiv);
-            showNotification('Failed to generate screenshot', 'error');
+        }).catch(err => {
+            console.error(err);
+            alert('Failed to generate image');
         });
-    } else {
-        document.body.removeChild(statementDiv);
-        showNotification('Screenshot library not available', 'error');
+    });
+    document.getElementById('shareBtn').addEventListener('click', function() {
+        const element = document.getElementById('statementContainer');
+        html2canvas(element, { scale: 2, backgroundColor: '#ffffff' }).then(canvas => {
+            canvas.toBlob(async function(blob) {
+                const file = new File([blob], 'statement.png', { type: 'image/png' });
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    try {
+                        await navigator.share({
+                            title: 'Tenant Statement',
+                            text: 'Statement for ${tenant.name}',
+                            files: [file]
+                        });
+                    } catch (err) {
+                        if (err.name !== 'AbortError') {
+                            alert('Sharing failed: ' + err.message);
+                        }
+                    }
+                } else {
+                    // Fallback: download
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'statement.png';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    alert('Share not supported, image downloaded instead');
+                }
+            }, 'image/png');
+        }).catch(err => {
+            alert('Could not prepare image for sharing');
+        });
+    });
+<\/script>
+</body>
+</html>`;
+    
+    // Open in a new window/tab
+    const newWin = window.open();
+    if (!newWin) {
+        showNotification('Popup blocked. Please allow popups for this site.', 'error');
+        return;
     }
+    newWin.document.write(statementHTML);
+    newWin.document.close();
+    
+    closePropertyExportDialog();
+    showNotification('Statement opened in new window', 'success');
 }
 
 function exportPropertyFull() {
@@ -1699,9 +1908,9 @@ function exportPropertyFull() {
                 const monthlyPayments = property.monthly?.filter(p => p.tenantId == tenant.id) || [];
                 const totalPaid = monthlyPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
                 const monthsCount = monthlyPayments.length;
-    const serviceChargeTotal = monthsCount * 300;
-    const expectedTotal = (tenant.rent * monthsCount) + serviceChargeTotal + (Number(tenant.depositPaid) || 0);
-    const balance = totalPaid - expectedTotal;
+                const serviceChargeTotal = monthsCount * 300;
+                const expectedTotal = (tenant.rent * monthsCount) + serviceChargeTotal + (Number(tenant.depositPaid) || 0);
+                const balance = totalPaid - expectedTotal;
                 const status = balance < 0 ? 'Payment Required' : 'Balanced';
                 
                 // Format date properly
@@ -5423,9 +5632,9 @@ function generateFilteredExcel(properties, includeProperties, includeTenants, in
                     const monthlyPayments = property.monthly?.filter(p => p.tenantId == tenant.id) || [];
                     const totalPaid = monthlyPayments.reduce((sum, payment) => sum + (payment.amount || 0), 0);
                     const monthsCount = monthlyPayments.length;
-    const serviceChargeTotal = monthsCount * 300;
-    const expectedTotal = (tenant.rent * monthsCount) + serviceChargeTotal + (Number(tenant.depositPaid) || 0);
-    const balance = totalPaid - expectedTotal;
+                    const serviceChargeTotal = monthsCount * 300;
+                    const expectedTotal = (tenant.rent * monthsCount) + serviceChargeTotal + (Number(tenant.depositPaid) || 0);
+                    const balance = totalPaid - expectedTotal;
                     const status = balance < 0 ? 'Payment Required' : 'Balanced';
                     
                     // Format date properly
